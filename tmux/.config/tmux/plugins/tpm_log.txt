@@ -232,3 +232,9 @@
 [2024-05-13 21:40:05.284]	 Invoking /home/user/.config/tmux/plugins/tpm/bin/clean_plugins all
 [2024-05-13 21:40:05.334]	 Done.
 
+[2024-05-18 18:13:53.659]	 List of discovered tpm plugins: tmux-plugins/tmux-cpu
+[2024-05-18 18:13:53.668]	 Invoking /home/user/.config/tmux/plugins/tpm/bin/install_plugins
+[2024-05-18 18:13:53.684]	 Installing "tmux-cpu"
+[2024-05-18 18:13:54.245]	   "tmux-cpu" download success
+[2024-05-18 18:13:54.256]	 Done.
+

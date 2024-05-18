@@ -170,3 +170,8 @@ zstyle ':fzf-tab:complete:cd:*' fzf-preview 'ls --color $realpath'
 zstyle ':fzf-tab:complete:__zoxide_z:*' fzf-preview 'ls --color $realpath'
 
 eval "$(zoxide init --cmd cd zsh)"
+
+# GPG-agent passphrase : needed in order to pass the passphrase through tty
+if [[ $(systemctl get-default) = "multi-user.target" ]]; then
+    export GPG_TTY=$(tty)
+fi
