@@ -57,3 +57,6 @@ stow -t ~ desktop
 stow -nv -t ~ bash # dry-run
 stow -D zsh # unstow
 ```
+## References
+(Stow has forever changed the way I manage my dotfiles)[https://www.youtube.com/watch?v=y6XCebnB9gs&t=335s]
+(Sync your .dotfiles with git and GNU #Stow like a pro!)[https://www.youtube.com/watch?v=CFzEuBGPPPg]
