@@ -18,9 +18,19 @@ or download it from [http://ftp.gnu.org/gnu/stow/](http://ftp.gnu.org/gnu/stow/)
 First, check out the dotfiles repo in your $HOME directory using git
 
 ```bash
-git clone https://github.com/BassemKaroui/.dotfiles.git
-git clone git@github.com:BassemKaroui/.dotfiles.git
-cd .dotfiles
+git clone --recursive https://github.com/BassemKaroui/.dotfiles.git ~/.dotfiles
+git clone --recursive git@github.com:BassemKaroui/.dotfiles.git ~/.dotfiles
+cd ~/.dotfiles/tmux/.tmux
+git checkout master
+cd ~/.dotfiles
+git config submodule.recurse true
+```
+
+In case 'tmux/.tmux' submodule got updated (has new commits) just do the following
+
+```bash
+git add -A
+git commit -m "update submodule version"
 ```
 
 then use GNU stow to create symlinks
