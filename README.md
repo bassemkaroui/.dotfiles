@@ -61,12 +61,17 @@ cd ~/.dotfiles/p10k
 stow -t ~ desktop
 ```
 
+## tmux specific
+
+Plugins are configured in tmux.conf.local but their directory is not tracked. In case of a new `git clone` or a `git pull` of a commit introducing new plugins, you need to install them inside a tmux session using `<prefix> I`
+
 # Stow usage
 
 ```bash
 stow -nv -t ~ bash # dry-run
 stow -D zsh # unstow
 ```
+
 ## References
 [Stow has forever changed the way I manage my dotfiles](https://www.youtube.com/watch?v=y6XCebnB9gs&t=335s)
 
