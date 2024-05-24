@@ -39,7 +39,7 @@ then use GNU stow to create symlinks
 
 ```bash
 cd ~/.dotfiles
-stow -t ~ bash fzf git gnome_themes gpg zsh tmux
+stow -t ~ bash fzf git gnome_themes gpg zsh tmux bat
 
 cd ~/.dotfiles/ssh
 stow -t ~ laptop
@@ -52,7 +52,7 @@ stow -t ~ laptop
 
 ```bash
 cd ~/.dotfiles
-stow -t ~ bash fzf git gnome_themes gpg zsh tmux
+stow -t ~ bash fzf git gnome_themes gpg zsh tmux bat
 
 cd ~/.dotfiles/ssh
 stow -t ~ desktop

@@ -375,8 +375,8 @@ set -g mouse on
 
 # force Vi mode
 #   really you should export VISUAL or EDITOR environment variable, see manual
-#set -g status-keys vi
-#set -g mode-keys vi
+# set -g status-keys vi
+# set -g mode-keys vi
 
 # replace C-b by C-a instead of using both prefixes
 # set -gu prefix2
@@ -434,11 +434,15 @@ tmux_conf_uninstall_plugins_on_reload=true
 #set -g @plugin 'tmux-plugins/tmux-copycat'
 set -g @plugin 'tmux-plugins/tmux-cpu'
 set -g @plugin 'christoomey/vim-tmux-navigator'
+# set -g @plugin 'sainnhe/tmux-fzf'
+# set -g @plugin 'omerxx/tmux-sessionx'
 set -g @plugin 'tmux-plugins/tmux-resurrect'
 set -g @plugin 'tmux-plugins/tmux-continuum'
 set -g @continuum-restore 'on'
-set -g @continuum-save-interval '1'
+set -g @continuum-save-interval '5'
 
+# TMUX_FZF_LAUNCH_KEY="C-z"
+# set -g @sessionx-bind 'S'
 # -- custom variables ----------------------------------------------------------
 
 # to define a custom #{foo} variable, define a POSIX shell function between the
