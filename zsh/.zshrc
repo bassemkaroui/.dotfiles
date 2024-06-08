@@ -1,14 +1,14 @@
+# GPG-agent passphrase : needed in order to pass the passphrase through tty
+# https://unix.stackexchange.com/questions/608842/zshrc-export-gpg-tty-tty-says-not-a-tty
+if [[ $(systemctl get-default) = "multi-user.target" ]]; then
+    export GPG_TTY=$(tty)
+fi
+
 # Enable Powerlevel10k instant prompt. Should stay close to the top of ~/.zshrc.
 # Initialization code that may require console input (password prompts, [y/n]
 # confirmations, etc.) must go above this block; everything else may go below.
 if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]; then
   source "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh"
-fi
-
-if [ -n "$TTY" ]; then
-    export GPG_TTY=$(tty)
-else
-    export GPG_TTY="$TTY"
 fi
 
 # If you come from bash you might have to change your $PATH.
