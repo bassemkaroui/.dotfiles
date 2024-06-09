@@ -363,6 +363,13 @@ tmux_conf_theme_clock_style="24"
 # on Linux, this requires xsel, xclip or wl-copy
 tmux_conf_copy_to_os_clipboard=true
 
+
+# -- urlscan -------------------------------------------------------------------
+
+# options passed to urlscan
+tmux_conf_urlscan_options="--compact --dedupe"
+
+
 # -- user customizations -------------------------------------------------------
 
 # this is the place to override or undo settings
@@ -399,7 +406,7 @@ bind C-Space send-prefix
 # bind c new-window -c '#{pane_current_path}' #!important
 
 # move status line to top
-# set -g status-position top
+set -g status-position top
 # set -g status-position bottom
 
 
