@@ -30,7 +30,7 @@ git config submodule.recurse true
 In case 'tmux/.tmux' submodule got updated (has new commits) just do the following
 
 ```bash
-git add -A
+git add tmux/.tmux
 git commit -m "update submodule version"
 ```
 
