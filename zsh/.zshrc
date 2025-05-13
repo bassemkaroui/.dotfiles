@@ -82,7 +82,7 @@ ZSH_THEME="powerlevel10k/powerlevel10k"
 # Example format: plugins=(rails git textmate ruby lighthouse)
 # Add wisely, as too many plugins slow down shell startup.
 #plugins=(git)
-plugins=(git fzf-tab zsh-autosuggestions zsh-syntax-highlighting sudo command-not-found poetry aws)
+plugins=(git fzf-tab zsh-autosuggestions zsh-syntax-highlighting sudo command-not-found poetry aws vi-mode)
 source $ZSH/oh-my-zsh.sh
 
 # User configuration
@@ -115,17 +115,21 @@ alias v="nvim"
 
 # >>> conda initialize >>>
 # !! Contents within this block are managed by 'conda init' !!
-__conda_setup="$('/home/user/anaconda3/bin/conda' 'shell.zsh' 'hook' 2> /dev/null)"
+__conda_setup="$('/home/user/miniforge3/bin/conda' 'shell.zsh' 'hook' 2> /dev/null)"
 if [ $? -eq 0 ]; then
     eval "$__conda_setup"
 else
-    if [ -f "/home/user/anaconda3/etc/profile.d/conda.sh" ]; then
-        . "/home/user/anaconda3/etc/profile.d/conda.sh"
+    if [ -f "/home/user/miniforge3/etc/profile.d/conda.sh" ]; then
+        . "/home/user/miniforge3/etc/profile.d/conda.sh"
     else
-        export PATH="/home/user/anaconda3/bin:$PATH"
+        export PATH="/home/user/miniforge3/bin:$PATH"
     fi
 fi
 unset __conda_setup
+
+if [ -f "/home/user/miniforge3/etc/profile.d/mamba.sh" ]; then
+    . "/home/user/miniforge3/etc/profile.d/mamba.sh"
+fi
 # <<< conda initialize <<<
 
 # JAVA_HOME=/usr/lib/jvm/jdk-11.0.11
@@ -147,9 +151,9 @@ compinit
 
 source <(kubectl completion zsh)
 alias k=kubectl
-export PATH="$PATH:/opt/nvim-linux64/bin"
+export PATH="$PATH:/opt/nvim-linux-x86_64/bin"
 export EDITOR=nvim
-export SUDO_EDITOR=/opt/nvim-linux64/bin/nvim
+export SUDO_EDITOR=/opt/nvim-linux-x86_64/bin/nvim
 export PATH=$PATH:/usr/local/go/bin
 
 HISTSIZE=50000
@@ -223,3 +227,28 @@ _fzf_comprun() {
   esac
 }
 
+eval "$(uvx --generate-shell-completion zsh)"
+eval "$(uv generate-shell-completion zsh)"
+
+fpath+=~/.zfunc; autoload -Uz compinit; compinit
+
+# Fix for Neovim when working with managed pythons with uv
+export PATH=$(dirname $(realpath $(which python3))):$PATH
+
+eval "$(register-python-argcomplete cz)"
+
+# # shell completion for duty (installed using uv tool)
+# source <(duty --completion)
+
+# Duckdb
+export PATH='/home/user/.duckdb/cli/latest':$PATH
+
+# yazi
+function y() {
+	local tmp="$(mktemp -t "yazi-cwd.XXXXXX")" cwd
+	yazi "$@" --cwd-file="$tmp"
+	if cwd="$(command cat -- "$tmp")" && [ -n "$cwd" ] && [ "$cwd" != "$PWD" ]; then
+		builtin cd -- "$cwd"
+	fi
+	rm -f -- "$tmp"
+}

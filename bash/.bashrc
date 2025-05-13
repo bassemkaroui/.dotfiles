@@ -144,3 +144,9 @@ unset __conda_setup
 . "$HOME/.cargo/env"
 
 [ -f ~/.fzf.bash ] && source ~/.fzf.bash
+
+source '/home/user/.bash_completions/pyconfigx.sh'
+
+source '/home/user/.bash_completions/smart-utilities.sh'
+
+
