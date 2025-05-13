@@ -11,6 +11,7 @@ Ensure you have the following installed on your system
 ```bash
 sudo nala install stow -y
 ```
+
 or download it from [http://ftp.gnu.org/gnu/stow/](http://ftp.gnu.org/gnu/stow/)
 
 ## Installation
@@ -39,7 +40,7 @@ then use GNU stow to create symlinks
 
 ```bash
 cd ~/.dotfiles
-stow -t ~ bash fzf git gnome_themes gpg zsh tmux bat
+stow -t ~ bash fzf git gnome_themes gpg zsh tmux bat yazi
 
 cd ~/.dotfiles/ssh
 stow -t ~ laptop
@@ -52,7 +53,7 @@ stow -t ~ laptop
 
 ```bash
 cd ~/.dotfiles
-stow -t ~ bash fzf git gnome_themes gpg zsh tmux bat
+stow -t ~ bash fzf git gnome_themes gpg zsh tmux bat, yazi
 
 cd ~/.dotfiles/ssh
 stow -t ~ desktop
@@ -73,6 +74,7 @@ stow -D zsh # unstow
 ```
 
 ## References
+
 [Stow has forever changed the way I manage my dotfiles](https://www.youtube.com/watch?v=y6XCebnB9gs&t=335s)
 
 [Sync your .dotfiles with git and GNU #Stow like a pro!](https://www.youtube.com/watch?v=CFzEuBGPPPg)
