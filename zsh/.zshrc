@@ -194,7 +194,6 @@ function y() {
 	fi
 	rm -f -- "$tmp"
 }
-
 # <<< mise-shell-tools
 
 # User configuration
