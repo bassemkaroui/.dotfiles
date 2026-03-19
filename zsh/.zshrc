@@ -112,6 +112,90 @@ ZSH_THEME="powerlevel10k/powerlevel10k"
 plugins=(git fzf-tab zsh-autosuggestions zsh-syntax-highlighting sudo command-not-found poetry aws)
 source $ZSH/oh-my-zsh.sh
 
+# >>> mise-shell-tools (managed by mise run setup:shell-tools — do not edit)
+
+# ── History ──
+HISTSIZE=50000
+HISTFILE=~/.zsh_history
+SAVEHIST=$HISTSIZE
+HISTDUP=erase
+setopt appendhistory
+setopt sharehistory
+setopt hist_ignore_space
+setopt hist_ignore_all_dups
+setopt hist_save_no_dups
+setopt hist_ignore_dups
+setopt hist_find_no_dups
+
+# ── Completion zstyles ──
+zstyle ':completion:*' matcher-list 'm:{a-z}={A-Za-z}'
+zstyle ':completion:*:git-checkout:*' sort false
+zstyle ':completion:*' list-colors ${(s.:.)LS_COLORS}
+zstyle ':completion:*' menu no
+zstyle ':fzf-tab:complete:cd:*' fzf-preview 'eza --color=always $realpath'
+zstyle ':fzf-tab:complete:__zoxide_z:*' fzf-preview 'eza --color=always $realpath'
+
+# ── Zoxide ──
+eval "$(zoxide init --cmd cd zsh)"
+
+# ── FZF + fd ──
+[ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
+export FZF_DEFAULT_COMMAND="fd --hidden --strip-cwd-prefix --exclude .git"
+export FZF_CTRL_T_COMMAND="$FZF_DEFAULT_COMMAND"
+export FZF_ALT_C_COMMAND="fd --type=d --hidden --strip-cwd-prefix --exclude .git"
+
+_fzf_compgen_path() {
+  fd --hidden --exclude .git . "$1"
+}
+
+_fzf_compgen_dir() {
+  fd --type=d --hidden --exclude .git . "$1"
+}
+
+# ── Bat ──
+export BAT_THEME=tokyonight_night
+alias cat=bat
+
+# ── FZF + Eza + Bat integration ──
+export FZF_CTRL_T_OPTS="--preview 'bat -n --color=always --line-range :500 {}'"
+export FZF_ALT_C_OPTS="--preview 'eza --tree --color=always {} | head -200'"
+
+_fzf_comprun() {
+  local command=$1
+  shift
+
+  case "$command" in
+    cd)           fzf --preview 'eza --tree --color=always {} | head -200' "$@" ;;
+    export|unset) fzf --preview "eval 'echo $'{}"         "$@" ;;
+    ssh)          fzf --preview 'dig {}'                   "$@" ;;
+    *)            fzf --preview "bat -n --color=always --line-range :500 {}" "$@" ;;
+  esac
+}
+
+# ── Neovim ──
+alias vim="nvim"
+alias v="nvim"
+export EDITOR=nvim
+export SUDO_EDITOR=$(which nvim)
+
+# ── UV completions ──
+eval "$(uvx --generate-shell-completion zsh)"
+eval "$(uv generate-shell-completion zsh)"
+
+# ── Python PATH fix for Neovim ──
+export PATH=$(dirname $(realpath $(which python3))):$PATH
+
+# ── Yazi ──
+function y() {
+	local tmp="$(mktemp -t "yazi-cwd.XXXXXX")" cwd
+	yazi "$@" --cwd-file="$tmp"
+	if cwd="$(command cat -- "$tmp")" && [ -n "$cwd" ] && [ "$cwd" != "$PWD" ]; then
+		builtin cd -- "$cwd"
+	fi
+	rm -f -- "$tmp"
+}
+
+# <<< mise-shell-tools
 # User configuration
 
 # export MANPATH="/usr/local/man:$MANPATH"
@@ -137,8 +221,6 @@ source $ZSH/oh-my-zsh.sh
 # Example aliases
 # alias zshconfig="mate ~/.zshrc"
 # alias ohmyzsh="mate ~/.oh-my-zsh"
-alias vim="nvim"
-alias v="nvim"
 
 # >>> conda initialize >>>
 # !! Contents within this block are managed by 'conda init' !!
@@ -179,100 +261,10 @@ compinit
 source <(kubectl completion zsh)
 alias k=kubectl
 # export PATH="$PATH:/opt/nvim-linux-x86_64/bin"
-export EDITOR=nvim
-# export SUDO_EDITOR=/opt/nvim-linux-x86_64/bin/nvim
-export SUDO_EDITOR=$(which nvim)
 export PATH=$PATH:/usr/local/go/bin
-
-HISTSIZE=50000
-HISTFILE=~/.zsh_history
-SAVEHIST=$HISTSIZE
-HISTDUP=erase
-setopt appendhistory
-setopt sharehistory
-setopt hist_ignore_space
-setopt hist_ignore_all_dups
-setopt hist_save_no_dups
-setopt hist_ignore_dups
-setopt hist_find_no_dups
-
-zstyle ':completion:*' matcher-list 'm:{a-z}={A-Za-z}'
-# disable sort when completing `git checkout`
-zstyle ':completion:*:git-checkout:*' sort false
-# set list-colors to enable filename colorizing
-zstyle ':completion:*' list-colors ${(s.:.)LS_COLORS}
-# force zsh not to show completion menu, which allows fzf-tab to capture the unambiguous prefix
-zstyle ':completion:*' menu no
-zstyle ':fzf-tab:complete:cd:*' fzf-preview 'ls --color $realpath'
-zstyle ':fzf-tab:complete:__zoxide_z:*' fzf-preview 'ls --color $realpath'
-
-eval "$(zoxide init --cmd cd zsh)"
-
-# ----------- FZF ------------------
-[ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
-
-# -- Use fd instead of fzf --
-
-export FZF_DEFAULT_COMMAND="fd --hidden --strip-cwd-prefix --exclude .git"
-export FZF_CTRL_T_COMMAND="$FZF_DEFAULT_COMMAND"
-export FZF_ALT_C_COMMAND="fd --type=d --hidden --strip-cwd-prefix --exclude .git"
-
-# Use fd (https://github.com/sharkdp/fd) for listing path candidates.
-# - The first argument to the function ($1) is the base path to start traversal
-# - See the source code (completion.{bash,zsh}) for the details.
-_fzf_compgen_path() {
-  fd --hidden --exclude .git . "$1"
-}
-
-# Use fd to generate the list for directory completion
-_fzf_compgen_dir() {
-  fd --type=d --hidden --exclude .git . "$1"
-}
-
-# ------------ bat ----------------
-export BAT_THEME=tokyonight_night
-alias cat=bat
-
-# ---------- fzf with eza and bat ----------
-export FZF_CTRL_T_OPTS="--preview 'bat -n --color=always --line-range :500 {}'"
-export FZF_ALT_C_OPTS="--preview 'eza --tree --color=always {} | head -200'"
-
-# Advanced customization of fzf options via _fzf_comprun function
-# - The first argument to the function is the name of the command.
-# - You should make sure to pass the rest of the arguments to fzf.
-_fzf_comprun() {
-  local command=$1
-  shift
-
-  case "$command" in
-    cd)           fzf --preview 'eza --tree --color=always {} | head -200' "$@" ;;
-    export|unset) fzf --preview "eval 'echo $'{}"         "$@" ;;
-    ssh)          fzf --preview 'dig {}'                   "$@" ;;
-    *)            fzf --preview "bat -n --color=always --line-range :500 {}" "$@" ;;
-  esac
-}
-
-eval "$(uvx --generate-shell-completion zsh)"
-eval "$(uv generate-shell-completion zsh)"
-
-fpath+=~/.zfunc; autoload -Uz compinit; compinit
-
-# Fix for Neovim when working with managed pythons with uv
-export PATH=$(dirname $(realpath $(which python3))):$PATH
 
 eval "$(register-python-argcomplete cz)"
 
 # # shell completion for duty (installed using uv tool)
 # source <(duty --completion)
-
-# yazi
-function y() {
-	local tmp="$(mktemp -t "yazi-cwd.XXXXXX")" cwd
-	yazi "$@" --cwd-file="$tmp"
-	if cwd="$(command cat -- "$tmp")" && [ -n "$cwd" ] && [ "$cwd" != "$PWD" ]; then
-		builtin cd -- "$cwd"
-	fi
-	rm -f -- "$tmp"
-}
-
 eval "$(fga completion zsh)"
