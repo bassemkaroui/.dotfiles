@@ -11,6 +11,33 @@ if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]
   source "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh"
 fi
 
+# >>> mise-setup (managed by mise run setup:zsh — do not edit)
+# mise PATH (for systems where mise is not in default PATH)
+for _mise_path in "$HOME/.local/bin" "$HOME/.local/share/mise/bin"; do
+    if [[ -x "$_mise_path/mise" && ":$PATH:" != *":$_mise_path:"* ]]; then
+        export PATH="$_mise_path:$PATH"
+        break
+    fi
+done
+unset _mise_path
+
+# mise completions
+MISE_COMPLETIONS_DIR="$HOME/.config/mise/completions"
+typeset -TUx FPATH fpath
+fpath=("$MISE_COMPLETIONS_DIR" $fpath)
+if [[ ! -f "$MISE_COMPLETIONS_DIR/_mise" ]]; then
+    typeset -g -A _comps
+    autoload -Uz _mise
+    _comps[mise]=_mise
+fi
+if (( $+commands[mise] )); then
+    { mise completions zsh >| "$MISE_COMPLETIONS_DIR/_mise"; } 2>/dev/null &|
+fi
+
+eval "$(mise activate zsh)"
+eval "$(mise hook-env -s zsh)"
+# <<< mise-setup
+
 # If you come from bash you might have to change your $PATH.
 # export PATH=$HOME/bin:/usr/local/bin:$PATH
 
@@ -82,7 +109,7 @@ ZSH_THEME="powerlevel10k/powerlevel10k"
 # Example format: plugins=(rails git textmate ruby lighthouse)
 # Add wisely, as too many plugins slow down shell startup.
 #plugins=(git)
-plugins=(git fzf-tab zsh-autosuggestions zsh-syntax-highlighting sudo command-not-found poetry aws vi-mode)
+plugins=(git fzf-tab zsh-autosuggestions zsh-syntax-highlighting sudo command-not-found poetry aws)
 source $ZSH/oh-my-zsh.sh
 
 # User configuration
@@ -151,9 +178,10 @@ compinit
 
 source <(kubectl completion zsh)
 alias k=kubectl
-export PATH="$PATH:/opt/nvim-linux-x86_64/bin"
+# export PATH="$PATH:/opt/nvim-linux-x86_64/bin"
 export EDITOR=nvim
-export SUDO_EDITOR=/opt/nvim-linux-x86_64/bin/nvim
+# export SUDO_EDITOR=/opt/nvim-linux-x86_64/bin/nvim
+export SUDO_EDITOR=$(which nvim)
 export PATH=$PATH:/usr/local/go/bin
 
 HISTSIZE=50000
@@ -202,9 +230,6 @@ _fzf_compgen_dir() {
 }
 
 # ------------ bat ----------------
-if [[ ! -f ~/.local/bin/bat && -f /usr/bin/batcat ]]; then
-    ln -s /usr/bin/batcat ~/.local/bin/bat
-fi
 export BAT_THEME=tokyonight_night
 alias cat=bat
 
@@ -240,9 +265,6 @@ eval "$(register-python-argcomplete cz)"
 # # shell completion for duty (installed using uv tool)
 # source <(duty --completion)
 
-# Duckdb
-export PATH='/home/user/.duckdb/cli/latest':$PATH
-
 # yazi
 function y() {
 	local tmp="$(mktemp -t "yazi-cwd.XXXXXX")" cwd
@@ -252,3 +274,5 @@ function y() {
 	fi
 	rm -f -- "$tmp"
 }
+
+eval "$(fga completion zsh)"
