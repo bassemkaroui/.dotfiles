@@ -14,8 +14,24 @@ fail()  { printf '\033[1;31m[FAIL]\033[0m   %s\n' "$*"; exit 1; }
 # ─── Phase 1: Check if fpp is already installed ──────────────────────────────
 
 info "Phase 1: Check if fpp is already installed"
+INSTALL_DIR="$HOME/.local/opt/PathPicker"
 if command -v fpp &>/dev/null; then
-    ok "fpp already installed: $(command -v fpp)"
+    if [[ -d "$INSTALL_DIR/.git" ]]; then
+        info "fpp installed from source — checking for updates..."
+        OLD_HEAD=$(git -C "$INSTALL_DIR" rev-parse HEAD)
+        if git -C "$INSTALL_DIR" pull --quiet; then
+            NEW_HEAD=$(git -C "$INSTALL_DIR" rev-parse HEAD)
+            if [[ "$OLD_HEAD" != "$NEW_HEAD" ]]; then
+                ok_changed "fpp updated from source: $(command -v fpp)"
+            else
+                ok "fpp already up to date: $(command -v fpp)"
+            fi
+        else
+            warn "fpp update failed, continuing with existing version"
+        fi
+    else
+        ok "fpp already installed via package manager: $(command -v fpp)"
+    fi
     exit 0
 fi
 
@@ -53,7 +69,6 @@ info "Phase 3: Installing PathPicker from GitHub into ~/.local/opt/"
 
 command -v git &>/dev/null || fail "Cannot install PathPicker: 'git' not found."
 
-INSTALL_DIR="$HOME/.local/opt/PathPicker"
 BIN_LINK="$HOME/.local/bin/fpp"
 
 mkdir -p "$HOME/.local/opt" "$HOME/.local/bin"
