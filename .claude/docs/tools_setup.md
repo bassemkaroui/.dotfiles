@@ -129,6 +129,10 @@ rust --version             # Should use mise-managed version
 - Managed by oh-my-tmux submodule
 - Install with `<prefix> I` inside tmux
 
+**Oh-my-tmux dependencies:**
+- **urlscan** — URL extraction from terminal content. Installed via `pipx:urlscan` in `mise/.config/mise/conf.d/divers.toml` (auto-installed by `mise install`)
+- **PathPicker (fpp)** — Interactive file selection from terminal output. Installed via `mise run install:pathpicker` (tries apt/nala first, falls back to cloning from GitHub into `~/.local/opt/PathPicker`)
+
 ---
 
 ## GPG & SSH Configuration
