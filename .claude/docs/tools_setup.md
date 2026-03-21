@@ -150,4 +150,4 @@ rust --version             # Should use mise-managed version
 - Laptop: May use hardware security tokens or lighter-weight keys
 - Desktop: Can afford more complex multi-key setups
 
-**Setup:** Device type auto-detected by `mise run setup:dotfiles`
+**Setup:** Device type auto-detected and persisted by `mise run setup:dotfiles` (see `.device-type`)

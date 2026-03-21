@@ -56,7 +56,7 @@
 
 ## Device-Specific Configurations
 
-**Pattern:** Hardware/device variants (laptop vs. desktop) co-exist in the same Stow package and are selected during setup.
+**Pattern:** Hardware/device variants (laptop vs. desktop) co-exist in the same Stow package and are selected during setup. The detected device type is persisted for future runs.
 
 **Implementation:**
 ```
@@ -68,9 +68,19 @@ p10k/
 └── (shared p10k config if any)
 ```
 
-**Selection logic:**
-- `mise run setup:dotfiles` auto-detects device type (likely via hostname or environment)
-- Stow only the appropriate variant: `stow -t ~ -S laptop`
+**Device-specific packages** are defined as a data-driven array in `setup:dotfiles`:
+```bash
+DEVICE_PACKAGES=(ssh p10k)
+```
+To add a new device-variant package, create `<package>/laptop/` and `<package>/desktop/` subdirectories, then append the package name to this array.
+
+**Selection logic (priority order):**
+1. `DOTFILES_DEVICE` environment variable (explicit override)
+2. `.device-type` file in repo root (persisted from previous run)
+3. Auto-detection via `/sys/class/power_supply/BAT*` (battery = laptop, otherwise desktop)
+4. Interactive prompt to confirm or change
+
+After detection, the result is persisted to `.dotfiles/.device-type` (git-ignored) so subsequent runs skip detection entirely.
 
 **Same pattern in:**
 - `ssh/laptop/` vs. `ssh/desktop/` — Different SSH key paths/configs per device
@@ -80,6 +90,7 @@ p10k/
 - Single repo for all machines
 - No branch switching or manual selection
 - Config changes sync across devices but preserve device-specific overrides
+- Persisted device type eliminates repeated prompts on re-runs
 
 **When applying:** Use for configs that vary by hardware, OS, or environment (SSH keys, display settings, resource limits).
 

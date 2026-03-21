@@ -57,9 +57,14 @@ ok "stow available: $(command -v stow)"
 
 # ─── Phase 3: Detect device type ─────────────────────────────────────────────
 
+DEVICE_TYPE_FILE="$DOTFILES_DIR/.device-type"
+
 info "Phase 3: Detect device type"
 if [[ -n "${DOTFILES_DEVICE:-}" ]]; then
     info "Using DOTFILES_DEVICE from environment: $DOTFILES_DEVICE"
+elif [[ -f "$DEVICE_TYPE_FILE" ]]; then
+    DOTFILES_DEVICE="$(<"$DEVICE_TYPE_FILE")"
+    info "Using persisted device type: $DOTFILES_DEVICE"
 else
     if ls /sys/class/power_supply/BAT* &>/dev/null 2>&1; then
         DOTFILES_DEVICE="laptop"
@@ -85,6 +90,9 @@ fi
 
 ok "Device type: $DOTFILES_DEVICE"
 
+# Persist device type for future runs
+printf '%s' "$DOTFILES_DEVICE" > "$DEVICE_TYPE_FILE"
+
 # ─── Phase 4: Deploy common packages ─────────────────────────────────────────
 
 info "Phase 4: Deploy common stow packages"
@@ -105,26 +113,19 @@ ok_changed "Common packages deployed: ${COMMON_PACKAGES[*]}"
 # ─── Phase 5: Deploy device-specific packages ────────────────────────────────
 
 info "Phase 5: Deploy device-specific packages ($DOTFILES_DEVICE)"
+DEVICE_PACKAGES=(ssh p10k)
 
-if [[ -d "$DOTFILES_DIR/ssh/$DOTFILES_DEVICE" ]]; then
-    cd "$DOTFILES_DIR/ssh"
-    stow -t "$HOME" "$DOTFILES_DEVICE" 2>&1 | while read -r line; do
-        info "  $line"
-    done
-    ok_changed "SSH config deployed ($DOTFILES_DEVICE)"
-else
-    warn "SSH config directory not found: ssh/$DOTFILES_DEVICE"
-fi
-
-if [[ -d "$DOTFILES_DIR/p10k/$DOTFILES_DEVICE" ]]; then
-    cd "$DOTFILES_DIR/p10k"
-    stow -t "$HOME" "$DOTFILES_DEVICE" 2>&1 | while read -r line; do
-        info "  $line"
-    done
-    ok_changed "p10k config deployed ($DOTFILES_DEVICE)"
-else
-    warn "p10k config directory not found: p10k/$DOTFILES_DEVICE"
-fi
+for pkg in "${DEVICE_PACKAGES[@]}"; do
+    if [[ -d "$DOTFILES_DIR/$pkg/$DOTFILES_DEVICE" ]]; then
+        cd "$DOTFILES_DIR/$pkg"
+        stow -t "$HOME" "$DOTFILES_DEVICE" 2>&1 | while read -r line; do
+            info "  $line"
+        done
+        ok_changed "$pkg config deployed ($DOTFILES_DEVICE)"
+    else
+        warn "$pkg config directory not found: $pkg/$DOTFILES_DEVICE"
+    fi
+done
 
 # ─── Phase 6: Ensure tmux submodule is on master ─────────────────────────────
 

@@ -63,7 +63,7 @@ stow -t ~ -S laptop                       # Device-specific (from p10k/, ssh/)
 ## Key Patterns
 
 - **Modular via Stow:** Each tool in its own package; deploy selectively
-- **Device-aware:** Laptop/desktop variants in `p10k/` and `ssh/`; auto-detected by setup tasks
+- **Device-aware:** Laptop/desktop variants in `p10k/` and `ssh/`; auto-detected and persisted to `.device-type`
 - **XDG compliance:** Configs use `~/.config/` for tool-specific settings
 - **Task-driven:** All setup automation flows through Mise
 - **Nested Stow:** Mise config itself is stowed, enabling config management of the manager
@@ -75,3 +75,13 @@ See `.claude/docs/architectural_patterns.md` for detailed pattern documentation.
 - [Architectural Patterns](.claude/docs/architectural_patterns.md) — Stow packages, Mise tasks, device configs
 - [Tools Setup](.claude/docs/tools_setup.md) — Runtime installation, CLI integrations
 - [Troubleshooting](.claude/docs/troubleshooting.md) — Common stow conflicts, missing dependencies
+
+## Documentation Maintenance
+
+After completing any code change, reflect on whether the change affects:
+- `CLAUDE.md` (project overview, patterns, commands)
+- `.claude/docs/architectural_patterns.md` (design patterns)
+- `.claude/docs/tools_setup.md` (tool configs, integrations)
+- `.claude/docs/troubleshooting.md` (common issues)
+
+If a doc update is needed, **ask the user for confirmation before modifying any documentation files**. Do not update docs silently.

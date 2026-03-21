@@ -1,3 +1,4 @@
 /tmux/.config/tmux/plugins/
 *.backup
 *.backup1
+.device-type

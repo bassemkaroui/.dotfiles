@@ -87,6 +87,20 @@ mise run install:nala
 mise run install:runtimes  # May need passwordless sudo
 ```
 
+### Wrong Device Type Detected or Persisted
+
+**Cause:** Auto-detection picked the wrong type, or `.device-type` was persisted from a previous run on different hardware.
+
+**Resolution:**
+```bash
+# Delete persisted device type and re-run
+rm ~/.dotfiles/.device-type
+mise run setup:dotfiles
+
+# Or override via environment variable
+DOTFILES_DEVICE=laptop mise run setup:dotfiles
+```
+
 ### Runtimes Not Found After `mise run install:runtimes`
 
 **Check:**
