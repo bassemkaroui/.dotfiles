@@ -93,16 +93,16 @@ stow -D -t ~ zsh     # unstow
 | `setup:shell-tools` | Configure shell integrations |
 | `setup:p10k-configure` | Run p10k configuration wizard |
 | `setup:nodes-tools` | Enable corepack |
+| `update:oh-my-tmux` | Update oh-my-tmux submodule to latest master |
 
 ## tmux
 
 Based on [oh-my-tmux](https://github.com/gpakosz/.tmux) (git submodule). Plugins are configured in `tmux.conf.local` but the plugins directory is not tracked. After cloning or pulling new plugin configs, install them inside a tmux session with `<prefix> I`.
 
-In case the `tmux/.tmux` submodule got updated (has new commits):
+To update the submodule to the latest upstream:
 
 ```bash
-git add tmux/.tmux
-git commit -m "update tmux submodule version"
+mise run update:oh-my-tmux
 ```
 
 ## References

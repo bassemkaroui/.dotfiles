@@ -1,0 +1,153 @@
+# Tools Setup & Configuration
+
+## Runtime Installation via Mise
+
+**Language Runtimes** (installed by `mise run install:runtimes`):
+- Rust (latest)
+- Go (latest)
+- Node.js (latest)
+- Neovim (stable)
+
+**How it works:**
+- Mise manages multiple versions per runtime; default versions defined in `.mise.toml`
+- Switch versions per-project via `.mise.toml` in project directory
+- Automatic switching via shell hooks in `.zshrc`
+
+**Verification:**
+```bash
+mise ls                    # List installed tools
+mise ls rust               # List rust versions
+rust --version             # Should use mise-managed version
+```
+
+---
+
+## CLI Tool Integrations
+
+### Fuzzy Finder (fzf)
+
+**Config location:** `fzf/.config/fzf/`
+
+**Integrations:**
+- Zsh key bindings: `Ctrl+T` (file search), `Ctrl+R` (history), `Alt+C` (directory)
+- Ripgrep integration: Real-time file filtering via `FZF_DEFAULT_COMMAND`
+- Preview: Bat (syntax highlighting) + fd (fast traversal)
+
+**Setup:** `mise run setup:shell-tools` configures all integrations
+
+---
+
+### Zoxide (Smart Directory Navigation)
+
+**Config:** `.zshrc` sources zoxide initialization
+
+**Usage:**
+- `z <pattern>` — Jump to frequently-visited directory
+- `zi <pattern>` — Interactive selection with fzf
+
+**How it works:** Tracks directory usage patterns; learns your common paths
+
+---
+
+### Bat (Cat Replacement)
+
+**Config location:** `bat/.config/bat/config`
+
+**Features:**
+- Syntax highlighting with theme support
+- Git diff integration (shows changed lines)
+- Line numbers and grid display
+- Automatic pager integration
+
+**Usage in dotfiles:**
+- `delta` (git diff) displays via bat internally
+- Fzf previews use bat for syntax highlighting
+
+---
+
+### Yazi (File Manager)
+
+**Config location:** `yazi/.config/yazi/`
+
+**Key bindings:**
+- `Ctrl+Alt+O` from Zsh spawns Yazi
+- `jk` navigation, `dd` delete, `yy` copy, `pp` paste
+
+**Integrations:**
+- Shell hook auto-completes to selected directory after Yazi closes
+- Configured via `setup:shell-tools`
+
+---
+
+### Delta (Git Diff Pager)
+
+**Config location:** `git/.config/delta` or `git/.gitconfig`
+
+**Features:**
+- Side-by-side diff view (default)
+- Syntax highlighting
+- Unified diff fallback for small changes
+
+**When used:** Automatic with `git diff`, `git show`, etc. (configured in `.gitconfig`)
+
+---
+
+## Shell Configuration Hierarchy
+
+**Zsh startup order:**
+
+1. **System/framework** → oh-my-zsh framework files (from mise-managed oh-my-zsh)
+2. **Plugins** → oh-my-zsh plugins (git, fzf, zoxide, etc.)
+3. **.zshrc** → User config (symlinked from `zsh/.zshrc`)
+   - Mise initialization (tool exports)
+   - Shell integrations (fzf, zoxide, bat)
+   - Aliases and functions
+   - P10k instant prompt (lazy-loaded)
+4. **Powerlevel10k** → Loaded last (`.p10k.zsh`)
+
+**Key integrations in .zshrc:**
+- `eval "$(mise activate zsh)"` — Mise runtime management
+- `eval "$(fzf --zsh)"` — Fzf key bindings
+- `eval "$(zoxide init zsh)"` — Zoxide shortcuts
+
+---
+
+## Plugin Management
+
+**Oh-my-zsh plugins** (defined in `.zshrc`):
+- `git` — Git aliases and helpers
+- `fzf` — Key bindings
+- `zoxide` — Directory navigation
+- Custom plugins in `zsh/oh-my-zsh/custom/plugins/`
+
+**Powerlevel10k theme:**
+- Instant prompt (cached) for fast startup
+- Font-dependent rendering (requires Nerd Font)
+- Customizable via `~/.p10k.zsh`
+
+**Tmux plugins:**
+- Managed by oh-my-tmux submodule
+- Install with `<prefix> I` inside tmux
+
+---
+
+## GPG & SSH Configuration
+
+### GPG Agent
+
+**Config location:** `gpg/.gnupg/`
+
+**Setup:**
+- Auto-starts via systemd user session
+- TTY detection handles multi-user environments
+- Pinentry configured for graphical password entry
+
+### SSH Keys
+
+**Config location:** `ssh/laptop/config` or `ssh/desktop/config`
+
+**Device-specific paths:**
+- Laptop: May use hardware security tokens or lighter-weight keys
+- Desktop: Can afford more complex multi-key setups
+
+**Setup:** Device type auto-detected by `mise run setup:dotfiles`
