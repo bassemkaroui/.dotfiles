@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+#MISE description="Install nala, a friendlier apt frontend"
+#MISE raw=true
+set -eo pipefail
+
+if command -v nala &>/dev/null; then
+  echo "nala already installed: $(command -v nala)"
+  exit 0
+fi
+
+curl https://gitlab.com/volian/volian-archive/-/raw/main/install-nala.sh | bash

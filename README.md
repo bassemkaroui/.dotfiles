@@ -18,7 +18,7 @@ Personal dotfiles managed with [GNU Stow](https://www.gnu.org/software/stow/) an
 
 3. Bootstrap everything:
    ```bash
-   mise run bootstrap
+   cd ~/.dotfiles && mise run init
    ```
 
 > The `setup:dotfiles` task can also clone the repo for you if `~/.dotfiles` doesn't exist yet. It will prompt you to set up SSH auth for GitHub first.
@@ -44,7 +44,7 @@ mise run setup:dotfiles
 
 ```bash
 cd ~/.dotfiles
-stow -t ~ bash fzf git gnome_themes gpg zsh tmux bat yazi
+stow -t ~ bash fzf git gnome_themes gpg zsh tmux bat yazi mise
 ```
 
 ### Device-specific configs (ssh, p10k)
@@ -66,6 +66,7 @@ stow -D -t ~ zsh     # unstow
 | Package | Contents |
 |---------|----------|
 | bash | `.bashrc`, `.bash_logout`, `.profile` |
+| mise | `.config/mise/` (config, conf.d, tasks) |
 | bat | `.config/bat/themes/` (tokyonight) |
 | fzf | `.fzf.bash`, `.fzf.zsh` |
 | git | `.gitconfig`, `.git-completion.bash`, `.git-prompt.sh`, `.git-template/` |
@@ -81,6 +82,7 @@ stow -D -t ~ zsh     # unstow
 
 | Task | Description |
 |------|-------------|
+| `init` | Entry point: install stow, deploy mise config, optionally run bootstrap |
 | `bootstrap` | Full machine setup |
 | `install:stow` | Install GNU Stow (apt/nala or from source if no sudo) |
 | `install:nala` | Install nala apt frontend |

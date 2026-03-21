@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+#MISE description="Enable corepack for Node package manager management"
+set -eo pipefail
+
+corepack enable

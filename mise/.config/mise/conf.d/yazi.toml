@@ -1,0 +1,12 @@
+[tools]
+glow = "latest"
+duckdb = "latest"
+ffmpeg = "latest"
+jq = "latest"
+eza = "latest"
+fzf = "latest"
+zoxide = "latest"
+imagemagick = "latest"
+fd = "latest"
+ripgrep = "latest"
+yazi = "25.4.8"

@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+#MISE description="Install the latest VeraCrypt console .deb for this Ubuntu/Pop!_OS version"
+#MISE quiet=true
+#MISE raw=true
+set -eo pipefail
+
+source /etc/os-release
+
+INSTALLED_VERSION="$(dpkg-query -W -f='${Version}' veracrypt-console 2>/dev/null \
+  || dpkg-query -W -f='${Version}' veracrypt 2>/dev/null \
+  || true)"
+OS_VERSION="$VERSION_ID"
+ARCH="$(dpkg --print-architecture)"
+
+RELEASE_JSON="$(curl -sf "https://api.github.com/repos/veracrypt/VeraCrypt/releases/latest")"
+TAG="$(echo "$RELEASE_JSON" | python3 -c "import json,sys; print(json.load(sys.stdin)['tag_name'])")"
+VERSION="${TAG#VeraCrypt_}"
+
+INSTALLED_UPSTREAM="${INSTALLED_VERSION%%-*}"   # e.g. "1.26.24-1~ubuntu22.04-1" → "1.26.24"
+
+if [[ "$INSTALLED_UPSTREAM" == "$VERSION" ]]; then
+  echo "VeraCrypt $VERSION already installed."
+  exit 0
+fi
+
+ASSET_NAME="veracrypt-console-${VERSION}-Ubuntu-${OS_VERSION}-${ARCH}.deb"
+ASSET_URL="$(echo "$RELEASE_JSON" | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+name = '${ASSET_NAME}'
+matches = [a['browser_download_url'] for a in data['assets'] if a['name'] == name]
+print(matches[0] if matches else '')
+")"
+
+if [ -z "$ASSET_URL" ]; then
+  echo "No matching asset found: $ASSET_NAME"
+  echo "Available Ubuntu console debs:"
+  echo "$RELEASE_JSON" | python3 -c "
+import json, sys
+for a in json.load(sys.stdin)['assets']:
+  n = a['name']
+  if 'veracrypt-console' in n and 'Ubuntu' in n and n.endswith('.deb') and not n.endswith('.sig'):
+    print(n)
+"
+  exit 1
+fi
+
+TMPDIR="$(mktemp -d)"
+chmod 755 "$TMPDIR"
+trap 'rm -rf "$TMPDIR"' EXIT
+echo "Downloading $ASSET_NAME..."
+curl -fL -o "$TMPDIR/$ASSET_NAME" "$ASSET_URL"
+echo "Installing (requires sudo)..."
+if ! sudo apt-get install -y -f "$TMPDIR/$ASSET_NAME"; then
+  echo "Warning: Failed to install VeraCrypt. Install manually: $ASSET_URL"
+  exit 0
+fi
+echo -e "\033[32mVeraCrypt $VERSION installed successfully.\033[0m"
+
+# "veracrypt" (no -console suffix) is the legacy package name; safe to purge without
+# touching the newly installed "veracrypt-console".
+if dpkg-query -W veracrypt &>/dev/null 2>&1; then
+  echo "Removing legacy veracrypt package..."
+  sudo apt-get purge -y veracrypt
+fi

@@ -1,0 +1,9 @@
+[settings]
+activate_aggressive = true
+
+[settings.task]
+run_auto_install = false
+
+[tools]
+# For mise completions
+usage = "latest"

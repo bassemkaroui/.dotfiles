@@ -1,0 +1,13 @@
+[tools]
+uv = "latest"
+tmux = "latest"
+resvg = "latest"
+bat = "latest"
+delta = "latest"
+"npm:corepack" = "latest"
+claude = "latest"
+"npm:@anthropic-ai/sandbox-runtime" = "latest"
+doppler = { version = "latest", exe = "doppler" }
+pre-commit = "latest"
+tlrc = "latest"
+gh = "latest"

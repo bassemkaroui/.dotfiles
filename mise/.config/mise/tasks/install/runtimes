@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+#MISE description="Install Rust, Go, and Node via mise"
+set -eo pipefail
+
+mise install rust go node
