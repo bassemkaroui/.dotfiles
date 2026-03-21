@@ -11,7 +11,9 @@
 2. Symlink points elsewhere (conflicting stow operation)
 3. Directory expected but file exists (or vice versa)
 
-**Resolution:**
+**Automatic handling:** `mise run setup:dotfiles` automatically backs up conflicting files/directories with a `.bak` suffix before stowing. It descends through shared directories (e.g., `~/.config`, `~/.gnupg`) and only backs up package-specific entries, so system directories with unrelated content are preserved.
+
+**Manual resolution** (when running `stow` directly):
 ```bash
 # Dry-run to see conflicts
 stow -nv -t ~ <package>

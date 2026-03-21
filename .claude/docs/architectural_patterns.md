@@ -15,6 +15,8 @@
 - Easy rollback (uninstall one package without touching others)
 - Clean version control (native git paths match deployed paths)
 
+**Conflict handling:** `setup:dotfiles` automatically backs up existing files/directories (`.bak` suffix) before stowing. It distinguishes shared directories (e.g., `~/.config`, `~/.gnupg`) from package-owned directories (e.g., `~/.config/yazi`) — shared dirs are descended into, package-owned dirs are backed up as a whole.
+
 **When applying:** Use Stow for any new tool/service config. Follow directory structure that mirrors `~/.` paths.
 
 ---
