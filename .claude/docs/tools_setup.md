@@ -96,14 +96,15 @@ rust --version             # Should use mise-managed version
 
 **Zsh startup order:**
 
-1. **System/framework** → oh-my-zsh framework files (from mise-managed oh-my-zsh)
-2. **Plugins** → oh-my-zsh plugins (git, fzf, zoxide, etc.)
-3. **.zshrc** → User config (symlinked from `zsh/.zshrc`)
+1. **.zprofile** → Login shell setup (symlinked from `zsh/.zprofile`). Ensures `~/.local/bin` is in PATH for tools installed outside package managers (e.g., fpp, stow from source)
+2. **System/framework** → oh-my-zsh framework files (from mise-managed oh-my-zsh)
+3. **Plugins** → oh-my-zsh plugins (git, fzf, zoxide, etc.)
+4. **.zshrc** → User config (symlinked from `zsh/.zshrc`)
    - Mise initialization (tool exports)
    - Shell integrations (fzf, zoxide, bat)
    - Aliases and functions
    - P10k instant prompt (lazy-loaded)
-4. **Powerlevel10k** → Loaded last (`.p10k.zsh`)
+5. **Powerlevel10k** → Loaded last (`.p10k.zsh`)
 
 **Key integrations in .zshrc:**
 - `eval "$(mise activate zsh)"` — Mise runtime management

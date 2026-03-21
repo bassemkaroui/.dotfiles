@@ -245,7 +245,6 @@ fi
 # export PATH=$PATH:$JAVA_HOME/bin
 
 export PATH=$PATH:/usr/share/code/bin
-export PATH=$PATH:/home/user/.local/bin
 
 # To customize prompt, run `p10k configure` or edit ~/.p10k.zsh.
 [[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
