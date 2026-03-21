@@ -15,14 +15,42 @@ backup_conflicts() {
     local pkg_dir="$1"
     local target="$2"
 
-    while IFS= read -r file; do
-        local rel="${file#"$pkg_dir"/}"
-        local target_file="$target/$rel"
-        if [[ -f "$target_file" && ! -L "$target_file" ]]; then
-            mv "$target_file" "$target_file.bak"
-            info "  Backed up: $target_file -> $target_file.bak"
+    for entry in "$pkg_dir"/.* "$pkg_dir"/*; do
+        [[ -e "$entry" ]] || continue
+        local name
+        name="$(basename "$entry")"
+        [[ "$name" == "." || "$name" == ".." ]] && continue
+
+        local target_path="$target/$name"
+        [[ -e "$target_path" ]] || continue   # no conflict
+        [[ -L "$target_path" ]] && continue    # already a symlink, skip
+
+        if [[ -f "$target_path" ]]; then
+            mv "$target_path" "$target_path.bak"
+            info "  Backed up: $target_path -> $target_path.bak"
+        elif [[ -d "$entry" && -d "$target_path" ]]; then
+            # Check if target dir has items not in the package
+            local has_extra=false
+            for target_item in "$target_path"/.* "$target_path"/*; do
+                [[ -e "$target_item" ]] || continue
+                local item_name
+                item_name="$(basename "$target_item")"
+                [[ "$item_name" == "." || "$item_name" == ".." ]] && continue
+                if [[ ! -e "$entry/$item_name" ]]; then
+                    has_extra=true
+                    break
+                fi
+            done
+            if [[ "$has_extra" == true ]]; then
+                # Shared dir (has items outside this package) - descend
+                backup_conflicts "$entry" "$target_path"
+            else
+                # Package-owned dir - back up the whole thing
+                mv "$target_path" "$target_path.bak"
+                info "  Backed up: $target_path -> $target_path.bak"
+            fi
         fi
-    done < <(find "$pkg_dir" -type f)
+    done
 }
 
 DOTFILES_DIR="$HOME/.dotfiles"
