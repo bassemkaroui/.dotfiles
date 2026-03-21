@@ -2,7 +2,7 @@
 #MISE description="Bootstrap a new machine: install tools, runtimes, and run post-setup steps"
 #MISE raw=true
 #MISE depends=["install:runtimes", "install:nala", "install:stow"]
-#MISE depends_post=["setup:nodes-tools", "install:veracrypt"]
+#MISE depends_post=["setup:nodes-tools", "install:veracrypt", "install:pathpicker"]
 set -eo pipefail
 
 mise run setup:zsh

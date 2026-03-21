@@ -11,3 +11,4 @@ doppler = { version = "latest", exe = "doppler" }
 pre-commit = "latest"
 tlrc = "latest"
 gh = "latest"
+"pipx:urlscan" = "latest"
