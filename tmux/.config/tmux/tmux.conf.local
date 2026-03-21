@@ -1,4 +1,4 @@
-# : << EOF
+# : << 'EOF'
 # Oh my tmux!
 # 💛🩷💙🖤❤️🤍
 # https://github.com/gpakosz/.tmux
@@ -467,6 +467,9 @@ TMUX_FZF_LAUNCH_KEY="C-z"
 # set -g @sessionx-bind 'S'
 # set -g @sessionx-x-path '~/.dotfiles'
 # set -g @sessionx-zoxide-mode 'on'
+
+# NOTE: this is important for "prefix C-l" to work properly when using "vim-tmux-navigator"
+bind-key -r -T prefix       C-l                    next-window #!important
 # -- custom variables ----------------------------------------------------------
 
 # to define a custom #{foo} variable, define a POSIX shell function between the
