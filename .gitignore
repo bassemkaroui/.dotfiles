@@ -2,3 +2,4 @@
 *.backup
 *.backup1
 .device-type
+mise/.config/mise/completions
