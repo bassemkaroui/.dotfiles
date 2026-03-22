@@ -78,6 +78,10 @@ fi
 if (( $+commands[gh] )); then
     { gh completion -s zsh >| "$COMPLETIONS_DIR/_gh"; } 2>/dev/null &|
 fi
+if (( $+commands[doppler] )); then
+    fpath=("$HOME/.local/share/doppler/zsh/completions" $fpath)
+    { doppler completion install --no-check-version >/dev/null 2>&1 &| }
+fi
 
 eval "$(mise activate zsh)"
 eval "$(mise hook-env -s zsh)"
