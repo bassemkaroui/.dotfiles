@@ -142,6 +142,4 @@ unset __conda_setup
 
 . "$HOME/.cargo/env"
 
-[ -f ~/.fzf.bash ] && source ~/.fzf.bash
-
 eval "$($HOME/.local/bin/mise activate bash)"

@@ -166,9 +166,9 @@ else
         info "Downloading tokyonight_night bat theme..."
         curl -fSL -o "$BAT_THEME_FILE" \
             "https://raw.githubusercontent.com/folke/tokyonight.nvim/main/extras/sublime/tokyonight_night.tmTheme"
-        bat cache --build >/dev/null 2>&1
         ok_changed "Installed tokyonight_night bat theme"
     fi
+    bat cache --build >/dev/null 2>&1
 fi
 
 # ─── Phase 2: fzf-tab plugin ─────────────────────────────────────────────────
