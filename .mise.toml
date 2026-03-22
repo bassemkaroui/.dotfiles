@@ -82,3 +82,7 @@ else
     info "Skipped. Run 'mise run bootstrap' when ready."
 fi
 """
+
+[tasks."mirror:dry-run"]
+description = "Test sanitization locally (no push)"
+run = "DRYRUN=1 bash scripts/sanitize-and-sync.sh"
