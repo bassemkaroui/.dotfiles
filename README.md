@@ -9,9 +9,9 @@ Personal dotfiles managed with [GNU Stow](https://www.gnu.org/software/stow/) an
    curl https://mise.run | sh
    ```
 
-2. Clone this repo:
+2. Clone this repo (use HTTPS on a new machine — SSH isn't configured yet):
    ```bash
-   git clone --recursive git@github.com:bassemkaroui/.dotfiles.git ~/.dotfiles
+   git clone --recursive https://github.com/bassemkaroui/.dotfiles.git ~/.dotfiles
    cd ~/.dotfiles/tmux/.tmux && git checkout master && cd ~/.dotfiles
    git config submodule.recurse true
    ```
@@ -19,6 +19,11 @@ Personal dotfiles managed with [GNU Stow](https://www.gnu.org/software/stow/) an
 3. Bootstrap everything:
    ```bash
    cd ~/.dotfiles && mise run init
+   ```
+
+4. After SSH keys are set up, switch the remote to SSH:
+   ```bash
+   git -C ~/.dotfiles remote set-url origin git@github.com:bassemkaroui/.dotfiles.git
    ```
 
 > The `setup:dotfiles` task can also clone the repo for you if `~/.dotfiles` doesn't exist yet. It will prompt you to set up SSH auth for GitHub first.

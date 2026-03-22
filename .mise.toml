@@ -67,6 +67,7 @@ cd ~/.dotfiles
 if [[ -L "$HOME/.config/mise/config.toml" ]]; then
     ok "mise config already deployed"
 else
+    mkdir -p ~/.config
     stow -t ~ mise
     ok_changed "mise config deployed to ~/.config/mise/"
 fi

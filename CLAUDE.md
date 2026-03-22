@@ -40,7 +40,7 @@ A modular dotfiles management system using **GNU Stow** for clean symlink-based 
 
 **First-time setup:**
 ```bash
-git clone --recursive git@github.com:bassemkaroui/.dotfiles.git ~/.dotfiles
+git clone --recursive https://github.com/bassemkaroui/.dotfiles.git ~/.dotfiles
 cd ~/.dotfiles
 mise run init           # Installs stow, deploys mise config
 mise run bootstrap      # Full machine setup
