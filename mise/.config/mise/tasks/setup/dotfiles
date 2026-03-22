@@ -29,7 +29,7 @@ next_backup_path() {
 # Directories that should always be recursed into (never backed up wholesale).
 # These contain unmanaged files (GPG keys, generated completions, auth tokens)
 # that must be left in place.
-RECURSE_DIRS=(.gnupg .config/gh)
+RECURSE_DIRS=(.gnupg .config/gh .claude .claude/plugins)
 
 is_recurse_dir() {
     local path="$1"
@@ -199,7 +199,7 @@ printf '%s' "$DOTFILES_DEVICE" >"$DEVICE_TYPE_FILE"
 
 # ─── Precompute shared directories ───────────────────────────────────────────
 
-COMMON_PACKAGES=(bash fzf git gnome_themes gpg zsh tmux bat yazi mise nvim gh gh-dash)
+COMMON_PACKAGES=(bash fzf git gnome_themes gpg zsh tmux bat yazi mise nvim gh gh-dash claude)
 DEVICE_PACKAGES=(ssh p10k)
 
 ALL_PKG_DIRS=()
@@ -282,7 +282,7 @@ fi
 # ─── Phase 8: Verify ─────────────────────────────────────────────────────────
 
 info "Phase 8: Verification"
-VERIFY_FILES=("$HOME/.zshrc" "$HOME/.gitconfig" "$HOME/.config/nvim/init.lua")
+VERIFY_FILES=("$HOME/.zshrc" "$HOME/.gitconfig" "$HOME/.config/nvim/init.lua" "$HOME/.claude/settings.json")
 if [[ "$DOTFILES_DEVICE" == "laptop" || "$DOTFILES_DEVICE" == "desktop" ]]; then
     VERIFY_FILES+=("$HOME/.ssh/config" "$HOME/.p10k.zsh")
 fi
