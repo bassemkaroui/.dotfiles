@@ -11,7 +11,7 @@ if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]
   source "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh"
 fi
 
-# >>> mise-setup (managed by mise run setup:zsh — do not edit)
+# >>> mise-setup (managed by mise run setup:zsh-config — do not edit)
 # mise PATH (for systems where mise is not in default PATH)
 for _mise_path in "$HOME/.local/bin" "$HOME/.local/share/mise/bin"; do
     if [[ -x "$_mise_path/mise" && ":$PATH:" != *":$_mise_path:"* ]]; then
@@ -21,17 +21,25 @@ for _mise_path in "$HOME/.local/bin" "$HOME/.local/share/mise/bin"; do
 done
 unset _mise_path
 
-# mise completions
-MISE_COMPLETIONS_DIR="$HOME/.config/mise/completions"
+# completions
+COMPLETIONS_DIR="$HOME/.config/completions"
 typeset -TUx FPATH fpath
-fpath=("$MISE_COMPLETIONS_DIR" $fpath)
-if [[ ! -f "$MISE_COMPLETIONS_DIR/_mise" ]]; then
+fpath=("$COMPLETIONS_DIR" $fpath)
+if [[ ! -f "$COMPLETIONS_DIR/_mise" ]]; then
     typeset -g -A _comps
     autoload -Uz _mise
     _comps[mise]=_mise
 fi
 if (( $+commands[mise] )); then
-    { mise completions zsh >| "$MISE_COMPLETIONS_DIR/_mise"; } 2>/dev/null &|
+    { mise completions zsh >| "$COMPLETIONS_DIR/_mise"; } 2>/dev/null &|
+fi
+if [[ ! -f "$COMPLETIONS_DIR/_gh" ]]; then
+    typeset -g -A _comps
+    autoload -Uz _gh
+    _comps[gh]=_gh
+fi
+if (( $+commands[gh] )); then
+    { gh completion -s zsh >| "$COMPLETIONS_DIR/_gh"; } 2>/dev/null &|
 fi
 
 eval "$(mise activate zsh)"

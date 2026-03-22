@@ -1,0 +1,144 @@
+#!/usr/bin/env bash
+#MISE description="Configure .zshrc with mise integration, plugins, and theme (run after setup:dotfiles)"
+#MISE raw=true
+set -eo pipefail
+
+# ─── Helpers ───────────────────────────────────────────────────────────────────
+
+info()  { printf '\033[1;34m[INFO]\033[0m   %s\n' "$*"; }
+warn()  { printf '\033[1;33m[WARN]\033[0m   %s\n' "$*"; }
+ok()    { printf '\033[1;32m[ OK ]\033[0m   %s\n' "$*"; }
+ok_changed() { printf '\033[1;32m[ OK ] \033[1;32m●\033[0m %s\n' "$*"; }
+
+# Resolve symlink target if present, otherwise return path as-is
+resolve_file() {
+    if [[ -L "$1" ]]; then
+        readlink -f "$1"
+    else
+        echo "$1"
+    fi
+}
+
+ZSHRC="$(resolve_file "$HOME/.zshrc")"
+
+if [[ ! -f "$ZSHRC" ]]; then
+    warn "No .zshrc found at $HOME/.zshrc — skipping configuration"
+    exit 0
+fi
+
+# ─── Phase 1: Mise integration block ─────────────────────────────────────────
+
+info "Phase 1: Mise integration in .zshrc"
+
+# Remove old commented completion line if present
+if grep -q '# eval "$(mise completion zsh)"' "$ZSHRC" 2>/dev/null; then
+    sed -i '/^# eval "\$(mise completion zsh)"$/d' "$ZSHRC"
+    ok_changed "Removed old commented mise completion line"
+fi
+
+# Add consolidated mise block to .zshrc (idempotent via marker)
+if grep -q '# >>> mise-setup' "$ZSHRC" 2>/dev/null; then
+    ok "Mise setup block already present in .zshrc"
+else
+    info "Adding mise setup block to .zshrc..."
+
+    # Clean up any old non-marker mise lines from previous runs
+    sed -i '/^eval "\$(mise activate zsh)"/d' "$ZSHRC"
+    sed -i '/^eval "\$(mise hook-env -s zsh)"/d' "$ZSHRC"
+    # Remove old completions block (between "# mise completions" and the &| line)
+    sed -i '/^# mise completions$/,/&|$/d' "$ZSHRC"
+
+    MISE_BLOCK='# >>> mise-setup (managed by mise run setup:zsh-config — do not edit)
+# mise PATH (for systems where mise is not in default PATH)
+for _mise_path in "$HOME/.local/bin" "$HOME/.local/share/mise/bin"; do
+    if [[ -x "$_mise_path/mise" && ":$PATH:" != *":$_mise_path:"* ]]; then
+        export PATH="$_mise_path:$PATH"
+        break
+    fi
+done
+unset _mise_path
+
+# completions
+COMPLETIONS_DIR="$HOME/.config/completions"
+typeset -TUx FPATH fpath
+fpath=("$COMPLETIONS_DIR" $fpath)
+if [[ ! -f "$COMPLETIONS_DIR/_mise" ]]; then
+    typeset -g -A _comps
+    autoload -Uz _mise
+    _comps[mise]=_mise
+fi
+if (( $+commands[mise] )); then
+    { mise completions zsh >| "$COMPLETIONS_DIR/_mise"; } 2>/dev/null &|
+fi
+if [[ ! -f "$COMPLETIONS_DIR/_gh" ]]; then
+    typeset -g -A _comps
+    autoload -Uz _gh
+    _comps[gh]=_gh
+fi
+if (( $+commands[gh] )); then
+    { gh completion -s zsh >| "$COMPLETIONS_DIR/_gh"; } 2>/dev/null &|
+fi
+
+eval "$(mise activate zsh)"
+eval "$(mise hook-env -s zsh)"
+# <<< mise-setup'
+
+    # Insert after p10k instant prompt so mise-managed tools (zoxide, fzf, etc.)
+    # are available before anything else in .zshrc tries to use them
+    if grep -q 'p10k-instant-prompt' "$ZSHRC"; then
+        # Use awk to insert after the closing 'fi' of the p10k instant prompt block
+        awk -v block="$MISE_BLOCK" '
+            /p10k-instant-prompt/ { in_p10k = 1 }
+            in_p10k && /^fi$/ { print; print ""; print block; in_p10k = 0; next }
+            { print }
+        ' "$ZSHRC" > "${ZSHRC}.tmp" && mv -f "${ZSHRC}.tmp" "$ZSHRC"
+        ok_changed "Added mise setup block to .zshrc (after p10k instant prompt)"
+    else
+        # No p10k instant prompt found — prepend to top of file
+        printf '%s\n\n' "$MISE_BLOCK" | cat - "$ZSHRC" > "${ZSHRC}.tmp" && mv -f "${ZSHRC}.tmp" "$ZSHRC"
+        ok_changed "Added mise setup block to top of .zshrc"
+    fi
+fi
+
+# ─── Phase 2: Ensure plugins in .zshrc ───────────────────────────────────────
+
+info "Phase 2: Plugins in .zshrc"
+REQUIRED_PLUGINS=(git zsh-autosuggestions zsh-syntax-highlighting)
+if grep -q '^plugins=(' "$ZSHRC" 2>/dev/null; then
+    for p in "${REQUIRED_PLUGINS[@]}"; do
+        if ! grep '^plugins=(' "$ZSHRC" | grep -qw "$p"; then
+            info "Adding plugin '$p' to plugins line..."
+            sed -i "s/^plugins=(\(.*\))/plugins=(\1 $p)/" "$ZSHRC"
+            ok_changed "Added $p to plugins"
+        else
+            ok "Plugin $p already in plugins list"
+        fi
+    done
+else
+    info "No plugins=() line found, adding one..."
+    # Insert before source $ZSH/oh-my-zsh.sh if present
+    if grep -q 'source.*oh-my-zsh.sh' "$ZSHRC"; then
+        sed -i '/source.*oh-my-zsh.sh/i plugins=(git zsh-autosuggestions zsh-syntax-highlighting)' "$ZSHRC"
+    else
+        printf '\nplugins=(git zsh-autosuggestions zsh-syntax-highlighting)\n' >> "$ZSHRC"
+    fi
+    ok_changed "Added plugins line"
+fi
+
+# ─── Phase 3: Set ZSH_THEME ─────────────────────────────────────────────────
+
+info "Phase 3: ZSH_THEME"
+if grep -q '^ZSH_THEME="powerlevel10k/powerlevel10k"' "$ZSHRC" 2>/dev/null; then
+    ok "ZSH_THEME already set to powerlevel10k"
+else
+    if grep -q '^ZSH_THEME=' "$ZSHRC"; then
+        sed -i 's/^ZSH_THEME=.*/ZSH_THEME="powerlevel10k\/powerlevel10k"/' "$ZSHRC"
+        ok_changed "Updated ZSH_THEME to powerlevel10k"
+    else
+        printf '\nZSH_THEME="powerlevel10k/powerlevel10k"\n' >> "$ZSHRC"
+        ok_changed "Added ZSH_THEME"
+    fi
+fi
+
+printf '\n'
+info "zsh-config complete"

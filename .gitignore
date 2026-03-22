@@ -2,4 +2,8 @@
 *.backup
 *.backup1
 .device-type
-mise/.config/mise/completions
+zsh/.config/completions/_*
+gpg/.gnupg/*
+!gpg/.gnupg/gpg-agent.conf
+gh/.config/gh/hosts.yml
+gh/.config/gh/state.yml
