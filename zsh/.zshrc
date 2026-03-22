@@ -50,7 +50,7 @@ eval "$(mise hook-env -s zsh)"
 # export PATH=$HOME/bin:/usr/local/bin:$PATH
 
 # Path to your oh-my-zsh installation.
-export ZSH="/home/user/.oh-my-zsh"
+export ZSH="$HOME/.oh-my-zsh"
 
 # Set name of the theme to load --- if set to "random", it will
 # load a random theme each time oh-my-zsh is loaded, in which case,
@@ -258,20 +258,22 @@ export PATH=$PATH:/usr/share/code/bin
 [[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
 
 # 1Password CLI autocompletion
-eval "$(op completion zsh)"; compdef _op op
+if (( $+commands[op] )); then eval "$(op completion zsh)"; compdef _op op; fi
 
 # >>>> Vagrant command completion (start)
 fpath=(/opt/vagrant/embedded/gems/2.3.0/gems/vagrant-2.3.0/contrib/zsh $fpath)
 compinit
 # <<<<  Vagrant command completion (end)
 
-source <(kubectl completion zsh)
-alias k=kubectl
+if (( $+commands[kubectl] )); then
+    source <(kubectl completion zsh)
+    alias k=kubectl
+fi
 # export PATH="$PATH:/opt/nvim-linux-x86_64/bin"
 export PATH=$PATH:/usr/local/go/bin
 
-eval "$(register-python-argcomplete cz)"
+if (( $+commands[register-python-argcomplete] )); then eval "$(register-python-argcomplete cz)"; fi
 
 # # shell completion for duty (installed using uv tool)
 # source <(duty --completion)
-eval "$(fga completion zsh)"
+if (( $+commands[fga] )); then eval "$(fga completion zsh)"; fi

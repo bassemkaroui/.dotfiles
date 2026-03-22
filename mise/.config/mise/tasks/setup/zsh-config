@@ -140,5 +140,15 @@ else
     fi
 fi
 
+# ─── Phase 4: Fix ZSH path ─────────────────────────────────────────────────
+
+info "Phase 4: ZSH path"
+if grep -q 'export ZSH="/home/' "$ZSHRC" 2>/dev/null; then
+    sed -i 's|export ZSH="/home/[^"]*/\.oh-my-zsh"|export ZSH="$HOME/.oh-my-zsh"|' "$ZSHRC"
+    ok_changed "Fixed hardcoded ZSH path to use \$HOME"
+else
+    ok "ZSH path already uses \$HOME (or not set)"
+fi
+
 printf '\n'
 info "zsh-config complete"

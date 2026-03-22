@@ -130,14 +130,9 @@ else
         warn "Falling back to 'exec zsh' in login file (only works for TTY/SSH logins,"
         warn "graphical terminal emulators read the shell from /etc/passwd)"
 
-        # Bash reads the FIRST file that exists: ~/.bash_profile > ~/.bash_login > ~/.profile
-        if [[ -f "$HOME/.bash_profile" ]]; then
-            LOGIN_FILE="$HOME/.bash_profile"
-        elif [[ -f "$HOME/.bash_login" ]]; then
-            LOGIN_FILE="$HOME/.bash_login"
-        else
-            LOGIN_FILE="$HOME/.profile"
-        fi
+        # Always use ~/.bash_profile — it takes priority over ~/.profile (which
+        # is managed by stow and would overwrite our changes) and ~/.bash_login.
+        LOGIN_FILE="$HOME/.bash_profile"
 
         if ! grep -q 'exec zsh' "$LOGIN_FILE" 2>/dev/null; then
             echo "export SHELL=$ZSH_PATH" >> "$LOGIN_FILE"
