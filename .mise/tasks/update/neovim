@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+#MISE description="Update neovim config submodule to latest custom_config"
+set -eo pipefail
+
+DOTFILES_DIR="$(git -C "$(dirname "$0")" rev-parse --show-toplevel)"
+SUBMODULE_PATH="$DOTFILES_DIR/nvim/.config/nvim"
+
+info()       { printf '\033[1;34m[INFO]\033[0m   %s\n' "$*"; }
+ok()         { printf '\033[1;32m[ OK ]\033[0m   %s\n' "$*"; }
+ok_changed() { printf '\033[1;32m[ OK ] \033[1;32m●\033[0m %s\n' "$*"; }
+fail()       { printf '\033[1;31m[FAIL]\033[0m   %s\n' "$*"; exit 1; }
+
+[[ -e "$SUBMODULE_PATH/.git" ]] \
+    || fail "neovim config submodule not found at $SUBMODULE_PATH"
+
+info "Updating neovim config submodule..."
+cd "$SUBMODULE_PATH"
+
+CURRENT_BRANCH="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+if [[ "$CURRENT_BRANCH" != "custom_config" ]]; then
+    info "Switching from '$CURRENT_BRANCH' to custom_config..."
+    git checkout custom_config
+fi
+
+BEFORE="$(git rev-parse HEAD)"
+git pull --ff-only origin custom_config
+AFTER="$(git rev-parse HEAD)"
+
+cd "$DOTFILES_DIR"
+if [[ "$BEFORE" != "$AFTER" ]]; then
+    git add nvim/.config/nvim
+    ok_changed "neovim config updated: ${BEFORE:0:7} → ${AFTER:0:7}"
+    printf '\n'
+    read -rp $'\033[1;34m[INFO]\033[0m   Commit this update? [Y/n] ' answer
+    if [[ "${answer,,}" =~ ^(y|yes|)$ ]]; then
+        git commit -m "update neovim config submodule version"
+        ok_changed "Committed: update neovim config submodule version"
+    else
+        info "Skipped commit. Run 'git commit -m \"update neovim config submodule version\"' when ready."
+    fi
+else
+    ok "neovim config already up to date ($(git -C "$SUBMODULE_PATH" describe --tags --always))"
+fi

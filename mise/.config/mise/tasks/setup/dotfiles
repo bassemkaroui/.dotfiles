@@ -29,25 +29,42 @@ backup_conflicts() {
             mv "$target_path" "$target_path.bak"
             info "  Backed up: $target_path -> $target_path.bak"
         elif [[ -d "$entry" && -d "$target_path" ]]; then
-            # Check if target dir has items not in the package
-            local has_extra=false
-            for target_item in "$target_path"/.* "$target_path"/*; do
-                [[ -e "$target_item" ]] || continue
-                local item_name
-                item_name="$(basename "$target_item")"
-                [[ "$item_name" == "." || "$item_name" == ".." ]] && continue
-                if [[ ! -e "$entry/$item_name" ]]; then
-                    has_extra=true
-                    break
-                fi
+            # Count children in the package directory
+            local pkg_child_count=0
+            for child in "$entry"/.* "$entry"/*; do
+                [[ -e "$child" ]] || continue
+                local child_name
+                child_name="$(basename "$child")"
+                [[ "$child_name" == "." || "$child_name" == ".." ]] && continue
+                pkg_child_count=$((pkg_child_count + 1))
             done
-            if [[ "$has_extra" == true ]]; then
-                # Shared dir (has items outside this package) - descend
-                backup_conflicts "$entry" "$target_path"
-            else
-                # Package-owned dir - back up the whole thing
+
+            if [[ $pkg_child_count -gt 1 ]]; then
+                # Package dir has multiple entries → substantive content → backup whole
                 mv "$target_path" "$target_path.bak"
                 info "  Backed up: $target_path -> $target_path.bak"
+            else
+                # Single entry → might be a path component or partial contribution
+                # Check if target has items not in the package
+                local has_extra=false
+                for target_item in "$target_path"/.* "$target_path"/*; do
+                    [[ -e "$target_item" ]] || continue
+                    local item_name
+                    item_name="$(basename "$target_item")"
+                    [[ "$item_name" == "." || "$item_name" == ".." ]] && continue
+                    if [[ ! -e "$entry/$item_name" ]]; then
+                        has_extra=true
+                        break
+                    fi
+                done
+                if [[ "$has_extra" == true ]]; then
+                    # Shared dir (has items outside this package) — descend
+                    backup_conflicts "$entry" "$target_path"
+                else
+                    # Package-owned dir — back up the whole thing
+                    mv "$target_path" "$target_path.bak"
+                    info "  Backed up: $target_path -> $target_path.bak"
+                fi
             fi
         fi
     done
@@ -86,6 +103,13 @@ else
         git checkout master
     fi
 
+    # Ensure nvim submodule is on custom_config
+    if [[ -d "$DOTFILES_DIR/nvim/.config/nvim" ]]; then
+        info "Checking out nvim submodule to custom_config..."
+        cd "$DOTFILES_DIR/nvim/.config/nvim"
+        git checkout custom_config
+    fi
+
     cd "$DOTFILES_DIR"
     git config submodule.recurse true
     ok_changed "Dotfiles repo cloned and configured"
@@ -114,20 +138,15 @@ else
         DOTFILES_DEVICE="desktop"
     fi
     info "Auto-detected device type: $DOTFILES_DEVICE"
-    printf 'Device type is "%s". Change? (y/N): ' "$DOTFILES_DEVICE"
+    printf 'Device type is "%s". Change? [l]aptop / [d]esktop / [n]one / Enter to keep: ' "$DOTFILES_DEVICE"
     read -r CHANGE_DEVICE
-    if [[ "$CHANGE_DEVICE" =~ ^[Yy]$ ]]; then
-        if [[ "$DOTFILES_DEVICE" == "laptop" ]]; then
-            DOTFILES_DEVICE="desktop"
-        else
-            DOTFILES_DEVICE="laptop"
-        fi
-        info "Switched to: $DOTFILES_DEVICE"
-    fi
-fi
-
-if [[ "$DOTFILES_DEVICE" != "laptop" && "$DOTFILES_DEVICE" != "desktop" ]]; then
-    fail "Invalid device type: '$DOTFILES_DEVICE'. Must be 'laptop' or 'desktop'."
+    case "${CHANGE_DEVICE,,}" in
+        l|laptop)  DOTFILES_DEVICE="laptop";  info "Switched to: laptop" ;;
+        d|desktop) DOTFILES_DEVICE="desktop"; info "Switched to: desktop" ;;
+        n|none)    DOTFILES_DEVICE="none";    info "Switched to: none (device-specific configs will be skipped)" ;;
+        "")        ;; # keep current
+        *)         warn "Unrecognized input '$CHANGE_DEVICE', keeping: $DOTFILES_DEVICE" ;;
+    esac
 fi
 
 ok "Device type: $DOTFILES_DEVICE"
@@ -138,7 +157,7 @@ printf '%s' "$DOTFILES_DEVICE" > "$DEVICE_TYPE_FILE"
 # ─── Phase 4: Deploy common packages ─────────────────────────────────────────
 
 info "Phase 4: Deploy common stow packages"
-COMMON_PACKAGES=(bash fzf git gnome_themes gpg zsh tmux bat yazi mise)
+COMMON_PACKAGES=(bash fzf git gnome_themes gpg zsh tmux bat yazi mise nvim)
 
 cd "$DOTFILES_DIR"
 for pkg in "${COMMON_PACKAGES[@]}"; do
@@ -187,10 +206,29 @@ else
     warn "tmux submodule not found at tmux/.tmux"
 fi
 
-# ─── Phase 7: Verify ─────────────────────────────────────────────────────────
+# ─── Phase 7: Ensure nvim submodule is on custom_config ──────────────────────
 
-info "Phase 7: Verification"
-VERIFY_FILES=("$HOME/.zshrc" "$HOME/.gitconfig" "$HOME/.ssh/config" "$HOME/.p10k.zsh")
+info "Phase 7: Neovim submodule"
+if [[ -e "$DOTFILES_DIR/nvim/.config/nvim/.git" ]]; then
+    cd "$DOTFILES_DIR/nvim/.config/nvim"
+    CURRENT_BRANCH="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+    if [[ "$CURRENT_BRANCH" != "custom_config" ]]; then
+        git checkout custom_config
+        ok_changed "nvim submodule checked out to custom_config"
+    else
+        ok "nvim submodule already on custom_config"
+    fi
+else
+    warn "nvim submodule not found at nvim/.config/nvim"
+fi
+
+# ─── Phase 8: Verify ─────────────────────────────────────────────────────────
+
+info "Phase 8: Verification"
+VERIFY_FILES=("$HOME/.zshrc" "$HOME/.gitconfig" "$HOME/.config/nvim/init.lua")
+if [[ "$DOTFILES_DEVICE" == "laptop" || "$DOTFILES_DEVICE" == "desktop" ]]; then
+    VERIFY_FILES+=("$HOME/.ssh/config" "$HOME/.p10k.zsh")
+fi
 for f in "${VERIFY_FILES[@]}"; do
     if [[ -L "$f" || -f "$f" ]]; then
         ok "  $f"
