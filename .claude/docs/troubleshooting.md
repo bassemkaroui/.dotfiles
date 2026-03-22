@@ -30,11 +30,16 @@ stow -t ~ zsh
 
 ### Stow Symlinks Broken After Update
 
-**Cause:** Git operations (reset, rebase) changed symlink targets
+**Cause:** Git operations (reset, rebase) changed symlink targets, or package contents changed (files added/removed/moved)
 
-**Resolution:**
+**Automatic resolution:** Re-running `mise run setup:dotfiles` handles this — it uses `stow -R` (restow) which removes all existing package symlinks and recreates them from the current package state.
+
+**Manual resolution** (for individual packages):
 ```bash
-# Re-stow affected packages
+# Restow affected packages (removes old symlinks, creates new ones)
+stow -R -t ~ zsh bash
+
+# Or the equivalent two-step if you need more control
 stow -D -t ~ zsh bash    # Delete
 stow -t ~ zsh bash        # Reinstall
 ```

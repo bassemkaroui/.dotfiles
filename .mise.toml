@@ -63,12 +63,16 @@ fi
 
 info "Step 2: Deploy mise config via stow"
 cd ~/.dotfiles
+mkdir -p ~/.config
 
-if [[ -L "$HOME/.config/mise/config.toml" ]]; then
+ALREADY_DEPLOYED=false
+[[ -L "$HOME/.config/mise/config.toml" ]] && ALREADY_DEPLOYED=true
+
+stow -R -t ~ mise
+
+if [[ "$ALREADY_DEPLOYED" == true ]]; then
     ok "mise config already deployed"
 else
-    mkdir -p ~/.config
-    stow -t ~ mise
     ok_changed "mise config deployed to ~/.config/mise/"
 fi
 
