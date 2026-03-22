@@ -2,7 +2,7 @@
 
 ## Overview
 
-A modular dotfiles management system using **GNU Stow** for clean symlink-based deployment and **Mise** for task automation. Configures a complete development environment across 12 config packages with device-aware (laptop/desktop) variants.
+A modular dotfiles management system using **GNU Stow** for clean symlink-based deployment and **Mise** for task automation. Configures a complete development environment across 16 config packages with device-aware (laptop/desktop) variants.
 
 ## Tech Stack
 
@@ -21,9 +21,12 @@ A modular dotfiles management system using **GNU Stow** for clean symlink-based 
 ├── bash/, zsh/        → Shell configurations
 ├── git/              → Git config & helpers
 ├── tmux/             → Tmux (oh-my-tmux submodule)
+├── nvim/             → Neovim config (git submodule)
 ├── p10k/             → Powerlevel10k prompt (laptop/desktop variants)
 ├── ssh/              → SSH configs (laptop/desktop variants)
 ├── fzf/, yazi/, bat/ → CLI tool configs
+├── gh/, gh-dash/     → GitHub CLI & dashboard configs
+├── claude/           → Claude Code IDE config (settings, keybindings, plugins)
 ├── mise/             → Mise tool config (nested stow)
 ├── gpg/, gnome_themes/, ruby/ → Additional tools
 └── .mise.toml        → Root mise task definitions
@@ -45,7 +48,7 @@ mise run bootstrap      # Full machine setup
 
 **Manual stow deployment:**
 ```bash
-stow -t ~ bash zsh git tmux fzf yazi bat # Core configs
+stow -t ~ bash zsh git tmux fzf yazi bat nvim gh gh-dash claude # Core configs
 stow -t ~ mise                            # Mise config
 stow -t ~ -S laptop                       # Device-specific (from p10k/, ssh/)
 ```

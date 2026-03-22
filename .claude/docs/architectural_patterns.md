@@ -140,6 +140,8 @@ tmux/.config/tmux/tmux.conf → ~/.config/tmux/tmux.conf
 **Current usage:**
 - `tmux/.tmux` → Submodule pointing to [oh-my-tmux](https://github.com/gpakosz/.tmux)
 - Deployed as `~/.config/tmux/` after stowing
+- `nvim/.config/nvim` → Submodule pointing to personal Neovim config
+- Deployed as `~/.config/nvim/` after stowing
 
 **Update flow:**
 - `git submodule update --remote` updates to latest

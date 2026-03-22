@@ -44,7 +44,7 @@ mise run setup:dotfiles
 
 ```bash
 cd ~/.dotfiles
-stow -t ~ bash fzf git gnome_themes gpg zsh tmux bat yazi mise
+stow -t ~ bash fzf git gnome_themes gpg zsh tmux bat yazi mise nvim gh gh-dash claude
 ```
 
 ### Device-specific configs (ssh, p10k)
@@ -77,6 +77,10 @@ stow -D -t ~ zsh     # unstow
 | tmux | `.config/tmux/` ([oh-my-tmux](https://github.com/gpakosz/.tmux) submodule) |
 | yazi | `.config/yazi/` (config, keymap, plugins, theme) |
 | zsh | `.zshrc`, `.zshenv` |
+| nvim | `.config/nvim/` (Neovim config — git submodule) |
+| gh | `.config/gh/config.yml` (GitHub CLI config) |
+| gh-dash | `.config/gh-dash/config.yml` (GitHub dashboard TUI) |
+| claude | `.claude/` (Claude Code settings, keybindings, plugins, commands, agents, skills) |
 
 ## Mise Tasks
 
@@ -92,6 +96,8 @@ stow -D -t ~ zsh     # unstow
 | `setup:dotfiles` | Deploy dotfiles via stow (auto-detects device type) |
 | `setup:shell-tools` | Configure shell integrations |
 | `setup:p10k-configure` | Run p10k configuration wizard |
+| `setup:zsh-config` | Configure `.zshrc` with mise integration, plugins, and theme (run after `setup:dotfiles`) |
+| `setup:completions` | Set up shell completions directory |
 | `setup:nodes-tools` | Enable corepack |
 | `update:oh-my-tmux` | Update oh-my-tmux submodule to latest master |
 
