@@ -218,14 +218,13 @@ compute_shared_dirs "${ALL_PKG_DIRS[@]}"
 
 info "Phase 4: Deploy common stow packages"
 
-cd "$DOTFILES_DIR"
 for pkg in "${COMMON_PACKAGES[@]}"; do
     if [[ ! -d "$DOTFILES_DIR/$pkg" ]]; then
         warn "Package directory '$pkg' not found, skipping"
         continue
     fi
     backup_conflicts "$DOTFILES_DIR/$pkg" "$HOME"
-    stow -R -t "$HOME" "$pkg" 2>&1 | while read -r line; do
+    stow -d "$DOTFILES_DIR" -R -t "$HOME" "$pkg" 2>&1 | { grep -v '^BUG in find_stowed_path' || true; } | while read -r line; do
         info "  $line"
     done
 done
@@ -240,8 +239,7 @@ else
     for pkg in "${DEVICE_PACKAGES[@]}"; do
         if [[ -d "$DOTFILES_DIR/$pkg/$DOTFILES_DEVICE" ]]; then
             backup_conflicts "$DOTFILES_DIR/$pkg/$DOTFILES_DEVICE" "$HOME"
-            cd "$DOTFILES_DIR/$pkg"
-            stow -R -t "$HOME" "$DOTFILES_DEVICE" 2>&1 | while read -r line; do
+            stow -d "$DOTFILES_DIR/$pkg" -R -t "$HOME" "$DOTFILES_DEVICE" 2>&1 | { grep -v '^BUG in find_stowed_path' || true; } | while read -r line; do
                 info "  $line"
             done
             ok_changed "$pkg config deployed ($DOTFILES_DEVICE)"
