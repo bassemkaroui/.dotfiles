@@ -24,6 +24,30 @@ if [[ ! -d "${ZSH_CUSTOM:-$HOME/.oh-my-zsh/custom}/themes/powerlevel10k" ]]; the
     exit 1
 fi
 
+# ─── Ensure ZSH_THEME is set to p10k ─────────────────────────────────────────
+
+ZSHRC="$(resolve_file "$HOME/.zshrc")"
+if [[ -f "$ZSHRC" ]]; then
+    if grep -q '^ZSH_THEME="powerlevel10k/powerlevel10k"' "$ZSHRC" 2>/dev/null; then
+        ok "ZSH_THEME already set to powerlevel10k"
+    else
+        if grep -q '^ZSH_THEME=' "$ZSHRC"; then
+            sed -i 's/^ZSH_THEME=.*/ZSH_THEME="powerlevel10k\/powerlevel10k"/' "$ZSHRC"
+            ok_changed "Updated ZSH_THEME to powerlevel10k in .zshrc"
+        else
+            # Insert before 'source $ZSH/oh-my-zsh.sh' if present, otherwise append
+            if grep -q 'source.*oh-my-zsh.sh' "$ZSHRC"; then
+                sed -i '/source.*oh-my-zsh.sh/i ZSH_THEME="powerlevel10k/powerlevel10k"' "$ZSHRC"
+            else
+                printf '\nZSH_THEME="powerlevel10k/powerlevel10k"\n' >> "$ZSHRC"
+            fi
+            ok_changed "Added ZSH_THEME=powerlevel10k to .zshrc"
+        fi
+    fi
+else
+    warn "No .zshrc found — p10k configure may not work"
+fi
+
 printf 'Would you like to configure powerlevel10k now? (y/N): '
 read -r CONFIGURE_P10K
 if [[ "$CONFIGURE_P10K" =~ ^[Yy]$ ]]; then
