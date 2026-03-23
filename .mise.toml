@@ -130,7 +130,7 @@ info "Step 2: Deploy mise config via stow"
 cd ~/.dotfiles
 mkdir -p ~/.config
 
-stow_output="$(stow -nv -t ~ mise 2>&1)"
+stow_output="$(stow -nv -t ~ mise 2>&1)" || true
 
 if echo "$stow_output" | grep -q "LINK:"; then
     # Fresh deploy — no conflicts, just needs linking
