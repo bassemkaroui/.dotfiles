@@ -79,11 +79,59 @@ fi
 
 # ─── Step 2: Deploy mise config via stow ──────────────────────────────────────
 
+# Find next available .bak suffix: .bak, .bak.1, .bak.2, ...
+next_backup_path() {
+    local path="$1"
+    local backup="$path.bak"
+    local i=1
+    while [[ -e "$backup" ]]; do
+        backup="$path.bak.$i"
+        ((i++))
+    done
+    printf '%s' "$backup"
+}
+
+# Back up conflicting real files/dirs inside ~/.config/mise/
+# Recurses through shared dirs (.config) and backs up package-owned contents.
+backup_mise_conflicts() {
+    local pkg_dir="$1"  # source dir in stow package
+    local target="$2"   # corresponding target dir
+
+    for entry in "$pkg_dir"/.* "$pkg_dir"/*; do
+        [[ -e "$entry" ]] || continue
+        local name
+        name="$(basename "$entry")"
+        [[ "$name" == "." || "$name" == ".." ]] && continue
+
+        local target_path="$target/$name"
+        [[ -e "$target_path" ]] || continue  # no conflict
+        [[ -L "$target_path" ]] && continue  # already a symlink, skip
+
+        if [[ -f "$target_path" ]]; then
+            local bak_path
+            bak_path="$(next_backup_path "$target_path")"
+            mv "$target_path" "$bak_path"
+            info "  Backed up: $target_path -> $bak_path"
+        elif [[ -d "$entry" && -d "$target_path" ]]; then
+            # .config is shared — recurse into it; mise-owned dirs get backed up wholly
+            if [[ "$name" == ".config" ]]; then
+                backup_mise_conflicts "$entry" "$target_path"
+            else
+                local bak_path
+                bak_path="$(next_backup_path "$target_path")"
+                mv "$target_path" "$bak_path"
+                info "  Backed up: $target_path -> $bak_path"
+            fi
+        fi
+    done
+}
+
 info "Step 2: Deploy mise config via stow"
 cd ~/.dotfiles
 mkdir -p ~/.config
 
 if stow -nv -t ~ mise 2>&1 | grep -q "LINK:"; then
+    backup_mise_conflicts "$HOME/.dotfiles/mise" "$HOME"
     stow -R -t ~ mise
     ok_changed "mise config deployed to ~/.config/mise/"
 else
