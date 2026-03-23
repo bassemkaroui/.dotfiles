@@ -250,79 +250,96 @@ NERD_FONT_SIZE=12
 FONT_SET=false
 
 # GNOME Terminal / Tilix (dconf-based)
-if command -v dconf &>/dev/null; then
+if command -v gnome-terminal &>/dev/null && command -v dconf &>/dev/null; then
     DCONF_WORKS=true
     if [[ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ]]; then
-        if command -v gnome-terminal &>/dev/null; then
-            warn "DBUS_SESSION_BUS_ADDRESS not set — dconf cannot access GNOME Terminal settings"
-            warn "(this is expected when running via su/SSH; font will need to be set from a desktop session)"
-        fi
+        warn "DBUS_SESSION_BUS_ADDRESS not set — dconf cannot access GNOME Terminal settings"
+        warn "(this is expected when running via su/SSH; font will need to be set from a desktop session)"
         DCONF_WORKS=false
     fi
 
     if [[ "$DCONF_WORKS" == true ]]; then
         PROFILES=$(dconf list /org/gnome/terminal/legacy/profiles:/ 2>/dev/null | grep '^:' | tr -d '/:' || true)
 
-        # If no profiles found but gnome-terminal is installed, use the well-known default profile UUID
-        if [[ -z "$PROFILES" ]] && command -v gnome-terminal &>/dev/null; then
+        # If no profiles found, use the well-known default profile UUID
+        if [[ -z "$PROFILES" ]]; then
             PROFILES="b1dcc9dd-5262-4d8d-a863-c897e6d979b9"
             info "No GNOME Terminal profiles found in dconf, using default profile UUID"
         fi
 
-        if [[ -n "$PROFILES" ]]; then
-            for PROFILE in $PROFILES; do
-                CURRENT=$(dconf read "/org/gnome/terminal/legacy/profiles:/:${PROFILE}/font" 2>/dev/null | tr -d "'")
-                if [[ "$CURRENT" != "${NERD_FONT} ${NERD_FONT_SIZE}" ]]; then
-                    dconf write "/org/gnome/terminal/legacy/profiles:/:${PROFILE}/font" "'${NERD_FONT} ${NERD_FONT_SIZE}'"
-                    dconf write "/org/gnome/terminal/legacy/profiles:/:${PROFILE}/use-system-font" "false"
-                    ok_changed "Set font for GNOME Terminal profile ${PROFILE}"
-                else
-                    ok "GNOME Terminal profile ${PROFILE} already using ${NERD_FONT}"
-                fi
-            done
-            FONT_SET=true
-        fi
+        for PROFILE in $PROFILES; do
+            CURRENT=$(dconf read "/org/gnome/terminal/legacy/profiles:/:${PROFILE}/font" 2>/dev/null | tr -d "'")
+            if [[ "$CURRENT" != "${NERD_FONT} ${NERD_FONT_SIZE}" ]]; then
+                dconf write "/org/gnome/terminal/legacy/profiles:/:${PROFILE}/font" "'${NERD_FONT} ${NERD_FONT_SIZE}'"
+                dconf write "/org/gnome/terminal/legacy/profiles:/:${PROFILE}/use-system-font" "false"
+                ok_changed "Set font for GNOME Terminal profile ${PROFILE}"
+            else
+                ok "GNOME Terminal profile ${PROFILE} already using ${NERD_FONT}"
+            fi
+        done
+        FONT_SET=true
     fi
 fi
 
 # Alacritty
 ALACRITTY_CFG="$HOME/.config/alacritty/alacritty.toml"
-if [[ -f "$ALACRITTY_CFG" ]]; then
-    if grep -q 'family' "$ALACRITTY_CFG" 2>/dev/null; then
-        sed -i "s/family = .*/family = \"${NERD_FONT}\"/" "$ALACRITTY_CFG"
+if command -v alacritty &>/dev/null; then
+    mkdir -p "$(dirname "$ALACRITTY_CFG")"
+    if [[ -f "$ALACRITTY_CFG" ]] && grep -q 'family' "$ALACRITTY_CFG" 2>/dev/null; then
+        CURRENT=$(grep 'family' "$ALACRITTY_CFG" | head -1 | sed 's/.*"\(.*\)".*/\1/')
+        if [[ "$CURRENT" == "$NERD_FONT" ]]; then
+            ok "Alacritty already using ${NERD_FONT}"
+        else
+            sed -i "s/family = .*/family = \"${NERD_FONT}\"/" "$ALACRITTY_CFG"
+            ok_changed "Set font in Alacritty config"
+        fi
     else
         printf '\n[font.normal]\nfamily = "%s"\nsize = %s\n' "$NERD_FONT" "$NERD_FONT_SIZE" >> "$ALACRITTY_CFG"
+        ok_changed "Set font in Alacritty config"
     fi
-    ok_changed "Set font in Alacritty config"
     FONT_SET=true
 fi
 
 # Kitty
 KITTY_CFG="$HOME/.config/kitty/kitty.conf"
-if [[ -f "$KITTY_CFG" ]]; then
-    if grep -q '^font_family' "$KITTY_CFG" 2>/dev/null; then
-        sed -i "s/^font_family .*/font_family ${NERD_FONT}/" "$KITTY_CFG"
+if command -v kitty &>/dev/null; then
+    mkdir -p "$(dirname "$KITTY_CFG")"
+    if [[ -f "$KITTY_CFG" ]] && grep -q '^font_family' "$KITTY_CFG" 2>/dev/null; then
+        CURRENT=$(grep '^font_family' "$KITTY_CFG" | head -1 | sed 's/^font_family //')
+        if [[ "$CURRENT" == "$NERD_FONT" ]]; then
+            ok "Kitty already using ${NERD_FONT}"
+        else
+            sed -i "s/^font_family .*/font_family ${NERD_FONT}/" "$KITTY_CFG"
+            ok_changed "Set font in Kitty config"
+        fi
     else
         printf '\nfont_family %s\nfont_size %s\n' "$NERD_FONT" "$NERD_FONT_SIZE" >> "$KITTY_CFG"
+        ok_changed "Set font in Kitty config"
     fi
-    ok_changed "Set font in Kitty config"
     FONT_SET=true
 fi
 
 # Ghostty
 GHOSTTY_CFG="$HOME/.config/ghostty/config"
-if [[ -f "$GHOSTTY_CFG" ]]; then
-    if grep -q '^font-family' "$GHOSTTY_CFG" 2>/dev/null; then
-        sed -i "s/^font-family.*/font-family = ${NERD_FONT}/" "$GHOSTTY_CFG"
+if command -v ghostty &>/dev/null; then
+    mkdir -p "$(dirname "$GHOSTTY_CFG")"
+    if [[ -f "$GHOSTTY_CFG" ]] && grep -q '^font-family' "$GHOSTTY_CFG" 2>/dev/null; then
+        CURRENT=$(grep '^font-family' "$GHOSTTY_CFG" | head -1 | sed 's/^font-family *= *//')
+        if [[ "$CURRENT" == "$NERD_FONT" ]]; then
+            ok "Ghostty already using ${NERD_FONT}"
+        else
+            sed -i "s/^font-family.*/font-family = ${NERD_FONT}/" "$GHOSTTY_CFG"
+            ok_changed "Set font in Ghostty config"
+        fi
     else
         printf '\nfont-family = %s\nfont-size = %s\n' "$NERD_FONT" "$NERD_FONT_SIZE" >> "$GHOSTTY_CFG"
+        ok_changed "Set font in Ghostty config"
     fi
-    ok_changed "Set font in Ghostty config"
     FONT_SET=true
 fi
 
 if [[ "$FONT_SET" == false ]]; then
-    warn "Could not detect terminal config — manually set font to '${NERD_FONT}'"
+    warn "No supported terminal found — manually set font to '${NERD_FONT}'"
 fi
 
 # ─── Phase 6: Hostname prompt (interactive) ──────────────────────────────────
