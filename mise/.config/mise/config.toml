@@ -1,5 +1,6 @@
 [settings]
 activate_aggressive = true
+go_set_gobin = false
 
 [settings.task]
 run_auto_install = false
