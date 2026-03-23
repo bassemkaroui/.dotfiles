@@ -179,3 +179,30 @@ elif command -v dnf >/dev/null; then
 - Source builds as last resort for tools not in package repos
 
 **When applying:** Use for cross-distro dotfiles. Test fallback paths on target systems.
+
+---
+
+## Public Mirror Sync
+
+**Pattern:** The private dotfiles repo is automatically sanitized and synced to a public mirror (`bassemkaroui/dotfiles`) on every push to `main`.
+
+**How it works:**
+1. Push to `main` triggers `.github/workflows/sync-public.yml` (GitHub Actions)
+2. The workflow runs `scripts/sanitize-and-sync.sh`, which:
+   - Exports tracked files and submodule content to a temp directory
+   - Removes files listed in `.sanitize.yml` → `exclude_files` (e.g., `.sanitize.yml`, `.claude/`, workflow file, sync script)
+   - Applies ordered text replacements from `.sanitize.yml` → `replacements` (personal info → placeholders)
+   - Generates a `CUSTOMIZE.md` listing all placeholders for consumers
+   - Runs leak detection against `.sanitize.yml` → `leak_patterns`
+   - Force-pushes the sanitized result to the public repo
+
+**Key files:**
+- `.github/workflows/sync-public.yml` — GitHub Actions workflow
+- `scripts/sanitize-and-sync.sh` — Sanitization and push logic
+- `.sanitize.yml` — Replacement rules, excluded files, and leak patterns
+
+**Required secret:** `PUBLIC_REPO_PAT` (GitHub PAT with write access to the public repo)
+
+**Local dry-run:** `mise run mirror:dry-run` — sanitizes to `/tmp/dotfiles-sanitized` without pushing
+
+**When applying:** To add new personal data, add a replacement rule in `.sanitize.yml` (longer/more-specific patterns first) and a corresponding leak pattern. To exclude a file from the public mirror, add it to `exclude_files`.
