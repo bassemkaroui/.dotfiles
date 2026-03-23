@@ -130,10 +130,18 @@ info "Step 2: Deploy mise config via stow"
 cd ~/.dotfiles
 mkdir -p ~/.config
 
-if stow -nv -t ~ mise 2>&1 | grep -q "LINK:"; then
+stow_output="$(stow -nv -t ~ mise 2>&1)"
+
+if echo "$stow_output" | grep -q "LINK:"; then
+    # Fresh deploy — no conflicts, just needs linking
     backup_mise_conflicts "$HOME/.dotfiles/mise" "$HOME"
     stow -R -t ~ mise
     ok_changed "mise config deployed to ~/.config/mise/"
+elif echo "$stow_output" | grep -qi "conflict"; then
+    # Real files exist that block stow — back up and force deploy
+    backup_mise_conflicts "$HOME/.dotfiles/mise" "$HOME"
+    stow -R -t ~ mise
+    ok_changed "mise config deployed to ~/.config/mise/ (conflicts resolved via backup)"
 else
     ok "mise config already deployed"
 fi
