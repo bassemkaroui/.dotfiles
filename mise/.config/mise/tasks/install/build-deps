@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+#MISE description="Install system build dependencies needed by tools compiled from source"
+#MISE raw=true
+set -eo pipefail
+
+# ─── Helpers ───────────────────────────────────────────────────────────────────
+
+info()       { printf '\033[1;34m[INFO]\033[0m   %s\n' "$*"; }
+warn()       { printf '\033[1;33m[WARN]\033[0m   %s\n' "$*"; }
+ok()         { printf '\033[1;32m[ OK ]\033[0m   %s\n' "$*"; }
+ok_changed() { printf '\033[1;32m[ OK ]\033[0m \033[1;32m●\033[0m %s\n' "$*"; }
+
+# ─── Package list ──────────────────────────────────────────────────────────────
+
+PACKAGES=(
+  # Core build tools
+  build-essential pkg-config autoconf automake libtool
+
+  # ffmpeg (compiled from source via asdf plugin)
+  nasm yasm
+
+  # imagemagick (compiled from source via asdf plugin)
+  libjpeg-dev libpng-dev libtiff-dev libwebp-dev
+  libfreetype-dev libfontconfig-dev libltdl-dev
+
+  # stow source-build fallback / general
+  libevent-dev libncurses-dev
+  curl git perl
+)
+
+# ─── Check for apt-based system ────────────────────────────────────────────────
+
+if ! command -v dpkg &>/dev/null || ! command -v apt-get &>/dev/null; then
+  warn "Not an apt-based system — skipping build dependency installation."
+  warn "You may need to manually install equivalents for: ${PACKAGES[*]}"
+  exit 0
+fi
+
+# ─── Find missing packages ────────────────────────────────────────────────────
+
+missing=()
+for pkg in "${PACKAGES[@]}"; do
+  if ! dpkg -s "$pkg" &>/dev/null; then
+    missing+=("$pkg")
+  fi
+done
+
+if [[ ${#missing[@]} -eq 0 ]]; then
+  ok "All build dependencies already installed"
+  exit 0
+fi
+
+info "Missing packages: ${missing[*]}"
+
+# ─── Try to install ───────────────────────────────────────────────────────────
+
+if ! command -v sudo &>/dev/null; then
+  warn "sudo not available — cannot install build dependencies."
+  warn "Please ask an administrator to install: ${missing[*]}"
+  exit 0
+fi
+
+info "Installing ${#missing[@]} missing package(s) via apt..."
+if sudo -n apt-get install -y "${missing[@]}" 2>/dev/null || sudo apt-get install -y "${missing[@]}"; then
+  ok_changed "Build dependencies installed: ${missing[*]}"
+else
+  warn "Could not install build dependencies (sudo failed or packages unavailable)."
+  warn "Some tools (ffmpeg, imagemagick) may fail to build. Missing: ${missing[*]}"
+fi

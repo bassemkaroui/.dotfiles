@@ -79,6 +79,27 @@ sudo dnf install stow
 sudo pacman -S stow
 ```
 
+### `mise install` Fails Building ffmpeg or imagemagick
+
+**Likely cause:** Missing system build dependencies (these tools are compiled from source via asdf plugins)
+
+**Check:**
+```bash
+mise run install:build-deps   # Installs all required system packages
+```
+
+**If no sudo access:** The task will warn about missing packages. Ask an administrator to install them:
+```bash
+# Core build tools
+sudo apt-get install build-essential pkg-config autoconf automake libtool
+
+# ffmpeg
+sudo apt-get install nasm yasm
+
+# imagemagick
+sudo apt-get install libjpeg-dev libpng-dev libtiff-dev libwebp-dev libfreetype-dev libfontconfig-dev libltdl-dev
+```
+
 ### `mise run bootstrap` Hangs
 
 **Likely cause:** Task waiting for interactive input (password prompt, confirmation)

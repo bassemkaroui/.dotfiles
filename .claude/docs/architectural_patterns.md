@@ -29,9 +29,10 @@
 ```
 .config/mise/tasks/
 ├── install/
-│   ├── stow.sh       # Bootstrap stow installation
-│   ├── nala.sh       # Package manager
-│   ├── runtimes.sh   # Rust, Go, Node via mise
+│   ├── build-deps    # System build dependencies (apt packages)
+│   ├── stow          # Bootstrap stow installation
+│   ├── nala          # Package manager
+│   ├── runtimes      # Rust, Go, Node via mise
 │   └── ...
 ├── setup/
 │   ├── zsh.sh        # Oh-my-zsh + plugins + p10k

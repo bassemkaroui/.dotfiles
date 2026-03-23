@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 #MISE description="Install GNU Stow (via package manager or from source)"
+#MISE depends=["install:build-deps"]
 #MISE raw=true
 set -eo pipefail
 
