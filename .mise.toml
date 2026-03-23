@@ -32,6 +32,24 @@ else
 
     if [[ "$INSTALLED" == false ]]; then
         info "Package manager failed or unavailable, building from source..."
+
+        # Install minimal build deps for stow
+        if command -v apt-get &>/dev/null; then
+            STOW_BUILD_DEPS=(build-essential autoconf automake curl perl)
+            missing=()
+            for pkg in "${STOW_BUILD_DEPS[@]}"; do
+                dpkg -s "$pkg" &>/dev/null || missing+=("$pkg")
+            done
+            if [[ ${missing[*]} ]]; then
+                info "Installing stow build dependencies: ${missing[*]}"
+                if command -v sudo &>/dev/null; then
+                    sudo apt-get install -y "${missing[@]}" || warn "Could not install some build deps"
+                else
+                    warn "sudo not available — please install: ${missing[*]}"
+                fi
+            fi
+        fi
+
         command -v perl &>/dev/null || fail "Cannot build stow: 'perl' not found"
         command -v make &>/dev/null || fail "Cannot build stow: 'make' not found"
 
