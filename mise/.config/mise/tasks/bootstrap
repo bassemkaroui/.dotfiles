@@ -8,6 +8,7 @@ set -eo pipefail
 mise run setup:zsh
 mise install
 mise run install:ghostty
+mise run setup:custom-dotfiles
 mise run setup:dotfiles
 mise run setup:zsh-config
 mise run setup:shell-tools

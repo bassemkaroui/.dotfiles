@@ -102,6 +102,7 @@ stow -D -t ~ zsh     # unstow
 | `install:runtimes`     | Install Rust, Go, Node via mise                                                           |
 | `install:veracrypt`    | Install latest VeraCrypt                                                                  |
 | `setup:zsh`            | Full zsh environment setup                                                                |
+| `setup:custom-dotfiles`| Manage custom config packages (add/remove your own configs)                               |
 | `setup:dotfiles`       | Deploy dotfiles via stow (auto-detects device type)                                       |
 | `setup:shell-tools`    | Configure shell integrations                                                              |
 | `setup:p10k-configure` | Run p10k configuration wizard                                                             |
@@ -118,6 +119,15 @@ To update the submodule to the latest upstream:
 
 ```bash
 mise run update:oh-my-tmux
+```
+
+## Custom Packages
+
+You can extend this repo with your own config packages (e.g., alacritty, wezterm, hyprland) in a separate directory (`~/.dotfiles-custom/`). See [CUSTOM-PACKAGES.md](CUSTOM-PACKAGES.md) for full details.
+
+```bash
+mise run setup:custom-dotfiles   # Interactive add/remove
+mise run setup:dotfiles           # Deploy everything
 ```
 
 ## References

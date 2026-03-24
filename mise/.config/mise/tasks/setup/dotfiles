@@ -23,7 +23,38 @@ next_backup_path() {
 # Directories that should always be recursed into (never backed up wholesale).
 # These contain unmanaged files (GPG keys, generated completions, auth tokens)
 # that must be left in place.
-RECURSE_DIRS=(.gnupg .config/gh .claude .claude/plugins)
+# RECURSE_DIRS=(.gnupg .config/gh .claude .claude/plugins)
+DOTFILES_DIR="$HOME/.dotfiles"
+CUSTOM_DIR="${DOTFILES_CUSTOM_DIR:-$HOME/.dotfiles-custom}"
+
+RECURSE_DIRS=(.gnupg .config/gh .claude)
+
+# Load custom packages from .custom-packages (INI-style tracking file)
+CUSTOM_PACKAGES=()
+CUSTOM_FILE="$CUSTOM_DIR/.custom-packages"
+if [[ -f "$CUSTOM_FILE" ]]; then
+    local_name="" local_recurse=""
+    while IFS= read -r line; do
+        line="${line%%#*}"
+        [[ -z "${line// /}" ]] && continue
+        if [[ "$line" =~ ^\[(.+)\]$ ]]; then
+            if [[ -n "$local_name" && -d "$CUSTOM_DIR/$local_name" ]]; then
+                CUSTOM_PACKAGES+=("$local_name")
+            fi
+            local_name="${BASH_REMATCH[1]}"
+            local_recurse=""
+        elif [[ "$line" =~ ^recurse_dirs=(.+)$ ]]; then
+            IFS=',' read -ra rdirs <<< "${BASH_REMATCH[1]}"
+            for rd in "${rdirs[@]}"; do
+                rd="${rd// /}"
+                [[ -n "$rd" ]] && RECURSE_DIRS+=("$rd")
+            done
+        fi
+    done <"$CUSTOM_FILE"
+    if [[ -n "$local_name" && -d "$CUSTOM_DIR/$local_name" ]]; then
+        CUSTOM_PACKAGES+=("$local_name")
+    fi
+fi
 
 is_recurse_dir() {
     local path="$1"
@@ -98,7 +129,6 @@ backup_conflicts() {
     done
 }
 
-DOTFILES_DIR="$HOME/.dotfiles"
 DOTFILES_REPO="git@github.com:bassemkaroui/.dotfiles.git"
 
 # ─── Phase 1: Clone dotfiles repo if missing ─────────────────────────────────
@@ -201,7 +231,7 @@ info "Phase 3.5: Stow exclusions"
 
 # Create .stow-exclude with header if missing
 if [[ ! -f "$STOW_EXCLUDE_FILE" ]]; then
-    cat > "$STOW_EXCLUDE_FILE" <<'HEADER'
+    cat >"$STOW_EXCLUDE_FILE" <<'HEADER'
 # Stow package exclusion list (per-machine, gitignored)
 # Add one package name per line to skip it during setup:dotfiles
 # Available packages: bash fzf git gnome_themes gpg zsh tmux bat yazi mise nvim gh gh-dash claude ghostty
@@ -214,11 +244,11 @@ fi
 read_exclusions() {
     EXCLUDED=()
     while IFS= read -r line; do
-        line="${line%%#*}"          # strip inline comments
-        line="${line// /}"          # strip spaces
+        line="${line%%#*}" # strip inline comments
+        line="${line// /}" # strip spaces
         [[ -z "$line" ]] && continue
         EXCLUDED+=("$line")
-    done < "$STOW_EXCLUDE_FILE"
+    done <"$STOW_EXCLUDE_FILE"
 }
 
 # Write exclusions back to file (preserves header comments)
@@ -226,16 +256,17 @@ write_exclusions() {
     # Keep only comment/blank lines from original, then append exclusions
     local tmpfile
     tmpfile="$(mktemp)"
-    grep -E '^\s*(#|$)' "$STOW_EXCLUDE_FILE" > "$tmpfile" || true
+    grep -E '^\s*(#|$)' "$STOW_EXCLUDE_FILE" >"$tmpfile" || true
     for pkg in "${EXCLUDED[@]}"; do
-        printf '%s\n' "$pkg" >> "$tmpfile"
+        printf '%s\n' "$pkg" >>"$tmpfile"
     done
     mv "$tmpfile" "$STOW_EXCLUDE_FILE"
 }
 
 # Check if a value is in an array
 in_array() {
-    local needle="$1"; shift
+    local needle="$1"
+    shift
     for item in "$@"; do
         [[ "$item" == "$needle" ]] && return 0
     done
@@ -308,7 +339,9 @@ while true; do
         # Build list of available (non-excluded) packages
         AVAILABLE=()
         for pkg in "${ALL_COMMON_PACKAGES[@]}" "${ALL_DEVICE_PACKAGES[@]}"; do
-            in_array "$pkg" "${EXCLUDED[@]}" || AVAILABLE+=("$pkg")
+            in_array "$pkg" "${EXCLUDED[@]}" && continue
+            in_array "$pkg" "${CUSTOM_PACKAGES[@]}" && continue
+            AVAILABLE+=("$pkg")
         done
         if ((${#AVAILABLE[@]} == 0)); then
             warn "All packages are already excluded"
@@ -370,6 +403,25 @@ while true; do
     esac
 done
 
+# Warn and remove custom packages from exclusions
+read_exclusions
+EXCLUSIONS_CLEANED=false
+for cpkg in "${CUSTOM_PACKAGES[@]}"; do
+    if in_array "$cpkg" "${EXCLUDED[@]}"; then
+        warn "Custom package '$cpkg' found in .stow-exclude — ignoring exclusion"
+        NEW_EXCLUDED=()
+        for pkg in "${EXCLUDED[@]}"; do
+            [[ "$pkg" != "$cpkg" ]] && NEW_EXCLUDED+=("$pkg")
+        done
+        EXCLUDED=("${NEW_EXCLUDED[@]}")
+        EXCLUSIONS_CLEANED=true
+    fi
+done
+if [[ "$EXCLUSIONS_CLEANED" == "true" ]]; then
+    write_exclusions
+    warn "Updated .stow-exclude to remove conflicting custom package entries"
+fi
+
 # Unstow any newly-excluded packages that have symlinks in $HOME
 read_exclusions
 for pkg in "${EXCLUDED[@]}"; do
@@ -407,6 +459,9 @@ for pkg in "${DEVICE_PACKAGES[@]}"; do
         ALL_PKG_DIRS+=("$DOTFILES_DIR/$pkg/$variant")
     done
 done
+for pkg in "${CUSTOM_PACKAGES[@]}"; do
+    ALL_PKG_DIRS+=("$CUSTOM_DIR/$pkg")
+done
 
 compute_shared_dirs "${ALL_PKG_DIRS[@]}"
 
@@ -425,6 +480,22 @@ for pkg in "${COMMON_PACKAGES[@]}"; do
     done
 done
 ok_changed "Common packages deployed: ${COMMON_PACKAGES[*]}"
+
+# Deploy custom packages (from sibling directory)
+if ((${#CUSTOM_PACKAGES[@]} > 0)); then
+    info "Deploying custom packages (from $CUSTOM_DIR)"
+    for pkg in "${CUSTOM_PACKAGES[@]}"; do
+        if [[ ! -d "$CUSTOM_DIR/$pkg" ]]; then
+            warn "Custom package '$pkg' listed but directory missing in $CUSTOM_DIR, skipping"
+            continue
+        fi
+        backup_conflicts "$CUSTOM_DIR/$pkg" "$HOME"
+        stow -d "$CUSTOM_DIR" -R -t "$HOME" "$pkg" 2>&1 | { grep -v '^BUG in find_stowed_path' || true; } | while read -r line; do
+            info "  $line"
+        done
+    done
+    ok_changed "Custom packages deployed: ${CUSTOM_PACKAGES[*]}"
+fi
 
 # ─── Phase 5: Deploy device-specific packages ────────────────────────────────
 

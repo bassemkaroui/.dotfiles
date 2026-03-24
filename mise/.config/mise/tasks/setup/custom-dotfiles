@@ -1,0 +1,525 @@
+#!/usr/bin/env bash
+#MISE description="Manage custom dotfiles packages (add/remove configs not in default set)"
+#MISE raw=true
+set -eo pipefail
+
+# ─── Helpers ───────────────────────────────────────────────────────────────────
+
+TASK_NAME="setup:custom-dotfiles"
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../lib/helpers.sh"
+
+DOTFILES_DIR="$HOME/.dotfiles"
+CUSTOM_DIR="${DOTFILES_CUSTOM_DIR:-$HOME/.dotfiles-custom}"
+CUSTOM_FILE="$CUSTOM_DIR/.custom-packages"
+
+# Default packages (must match setup:dotfiles arrays)
+ALL_DEFAULT_PACKAGES=(bash fzf git gnome_themes gpg zsh tmux bat yazi mise nvim gh gh-dash claude ghostty ssh p10k)
+
+# Known non-package directories at repo root
+NON_PKG_DIRS=(.git .github .claude scripts)
+
+# ─── INI Parser/Writer ────────────────────────────────────────────────────────
+
+# Parallel arrays populated by read_custom_packages()
+PKG_NAMES=()
+PKG_SOURCES=()
+PKG_TYPES=()
+PKG_RECURSE_DIRS=()
+
+read_custom_packages() {
+    PKG_NAMES=()
+    PKG_SOURCES=()
+    PKG_TYPES=()
+    PKG_RECURSE_DIRS=()
+
+    [[ -f "$CUSTOM_FILE" ]] || return 0
+
+    local current_name="" current_source="" current_type="" current_recurse=""
+
+    while IFS= read -r line; do
+        line="${line%%#*}"           # strip comments
+        [[ -z "${line// /}" ]] && continue
+
+        if [[ "$line" =~ ^\[(.+)\]$ ]]; then
+            # Save previous package if any
+            if [[ -n "$current_name" ]]; then
+                PKG_NAMES+=("$current_name")
+                PKG_SOURCES+=("$current_source")
+                PKG_TYPES+=("$current_type")
+                PKG_RECURSE_DIRS+=("$current_recurse")
+            fi
+            current_name="${BASH_REMATCH[1]}"
+            current_source=""
+            current_type="full"
+            current_recurse=""
+        elif [[ "$line" =~ ^source=(.+)$ ]]; then
+            current_source="${BASH_REMATCH[1]}"
+            # Expand ~ to $HOME
+            current_source="${current_source/#\~/$HOME}"
+        elif [[ "$line" =~ ^type=(.+)$ ]]; then
+            current_type="${BASH_REMATCH[1]}"
+        elif [[ "$line" =~ ^recurse_dirs=(.+)$ ]]; then
+            current_recurse="${BASH_REMATCH[1]}"
+        fi
+    done <"$CUSTOM_FILE"
+
+    # Don't forget last package
+    if [[ -n "$current_name" ]]; then
+        PKG_NAMES+=("$current_name")
+        PKG_SOURCES+=("$current_source")
+        PKG_TYPES+=("$current_type")
+        PKG_RECURSE_DIRS+=("$current_recurse")
+    fi
+}
+
+write_custom_packages() {
+    {
+        printf '# Custom dotfiles packages (managed by setup:custom-dotfiles)\n'
+        printf '# Do not edit manually — use: mise run setup:custom-dotfiles\n\n'
+
+        for i in "${!PKG_NAMES[@]}"; do
+            printf '[%s]\n' "${PKG_NAMES[$i]}"
+            printf 'source=%s\n' "${PKG_SOURCES[$i]}"
+            printf 'type=%s\n' "${PKG_TYPES[$i]}"
+            if [[ -n "${PKG_RECURSE_DIRS[$i]}" ]]; then
+                printf 'recurse_dirs=%s\n' "${PKG_RECURSE_DIRS[$i]}"
+            fi
+            printf '\n'
+        done
+    } >"$CUSTOM_FILE"
+}
+
+# ─── Utility functions ────────────────────────────────────────────────────────
+
+in_array() {
+    local needle="$1"
+    shift
+    for item in "$@"; do
+        [[ "$item" == "$needle" ]] && return 0
+    done
+    return 1
+}
+
+# Find next available .bak suffix: .bak, .bak.1, .bak.2, ...
+next_backup_path() {
+    local path="$1"
+    local backup="$path.bak"
+    local i=1
+    while [[ -e "$backup" ]]; do
+        backup="$path.bak.$i"
+        ((i++))
+    done
+    printf '%s' "$backup"
+}
+
+# Unstow a package and restore backups
+unstow_custom_package() {
+    local pkg="$1"
+    local pkg_dir="$CUSTOM_DIR/$pkg"
+
+    if [[ -d "$pkg_dir" ]]; then
+        stow -D -d "$CUSTOM_DIR" -t "$HOME" "$pkg" 2>/dev/null || true
+        info "  Unstowed package: $pkg"
+    fi
+
+    [[ -d "$pkg_dir" ]] || return 0
+
+    # Restore backups: find files that belong to this package
+    while IFS= read -r -d '' rel_path; do
+        [[ -z "$rel_path" ]] && continue
+        local target="$HOME/$rel_path"
+        # Find the highest numbered backup
+        local restore_from=""
+        local i=1
+        if [[ -e "$target.bak" ]]; then
+            restore_from="$target.bak"
+        fi
+        while [[ -e "$target.bak.$i" ]]; do
+            restore_from="$target.bak.$i"
+            ((i++))
+        done
+        if [[ -n "$restore_from" ]]; then
+            # Ensure parent directory exists
+            mkdir -p "$(dirname "$target")"
+            mv "$restore_from" "$target"
+            info "  Restored: $restore_from -> $target"
+        fi
+    done < <(find "$pkg_dir" -mindepth 1 \( -type f -o -type l \) \
+        -not -path '*/.git/*' -not -name '.git' \
+        -printf '%P\0' 2>/dev/null)
+}
+
+# Compute the relative path from $HOME to a given path
+# e.g., /home/user/.config/alacritty -> .config/alacritty
+home_relative_path() {
+    local abs_path
+    abs_path="$(realpath "$1")"
+    printf '%s' "${abs_path#"$HOME"/}"
+}
+
+# Infer a package name from a path
+# ~/.config/alacritty -> alacritty
+# ~/.tool-config -> tool-config
+infer_package_name() {
+    local path="$1"
+    basename "$path"
+}
+
+# Check if a path is already a stow symlink pointing into the dotfiles repo
+is_stow_symlink() {
+    local path="$1"
+    if [[ -L "$path" ]]; then
+        local target
+        target="$(readlink -f "$path")"
+        [[ "$target" == "$DOTFILES_DIR"/* || "$target" == "$CUSTOM_DIR"/* ]] && return 0
+    fi
+    return 1
+}
+
+# ─── Directory management ────────────────────────────────────────────────────
+
+ensure_custom_dir() {
+    if [[ -d "$CUSTOM_DIR" ]]; then
+        ok "Custom directory exists: $CUSTOM_DIR"
+        return 0
+    fi
+
+    info "Custom packages directory not found: $CUSTOM_DIR"
+    printf 'Create it now? (Y/n): '
+    read -r confirm
+    [[ "$confirm" =~ ^[Nn]$ ]] && return 1
+
+    mkdir -p "$CUSTOM_DIR"
+
+    printf 'Initialize as a git repository? (Y/n): '
+    read -r init_git
+    if [[ ! "$init_git" =~ ^[Nn]$ ]]; then
+        git -C "$CUSTOM_DIR" init
+        printf '*.bak\n*.bak.*\n' >"$CUSTOM_DIR/.gitignore"
+        git -C "$CUSTOM_DIR" add .gitignore
+        git -C "$CUSTOM_DIR" commit -m "init: custom dotfiles repo"
+        ok "Initialized git repo in $CUSTOM_DIR"
+    fi
+
+    ok "Created custom directory: $CUSTOM_DIR"
+}
+
+# ─── Consistency check ────────────────────────────────────────────────────────
+
+verify_custom_packages() {
+    [[ -f "$CUSTOM_FILE" ]] || return 0
+    read_custom_packages
+
+    local dirty=false
+    local -a to_remove=()
+
+    for i in "${!PKG_NAMES[@]}"; do
+        local name="${PKG_NAMES[$i]}"
+        if [[ ! -d "$CUSTOM_DIR/$name" ]]; then
+            warn "Custom package '$name' listed in .custom-packages but directory missing in repo"
+            printf '  Remove from tracking file? (y/N): '
+            read -r confirm
+            if [[ "$confirm" =~ ^[Yy]$ ]]; then
+                to_remove+=("$name")
+                dirty=true
+            fi
+        fi
+    done
+
+    if [[ "$dirty" == "true" ]]; then
+        # Rebuild arrays without removed packages
+        local -a new_names=() new_sources=() new_types=() new_recurse=()
+        for i in "${!PKG_NAMES[@]}"; do
+            if ! in_array "${PKG_NAMES[$i]}" "${to_remove[@]}"; then
+                new_names+=("${PKG_NAMES[$i]}")
+                new_sources+=("${PKG_SOURCES[$i]}")
+                new_types+=("${PKG_TYPES[$i]}")
+                new_recurse+=("${PKG_RECURSE_DIRS[$i]}")
+            fi
+        done
+        PKG_NAMES=("${new_names[@]}")
+        PKG_SOURCES=("${new_sources[@]}")
+        PKG_TYPES=("${new_types[@]}")
+        PKG_RECURSE_DIRS=("${new_recurse[@]}")
+        write_custom_packages
+        if [[ -d "$CUSTOM_DIR/.git" ]]; then
+            git -C "$CUSTOM_DIR" add .custom-packages
+            git -C "$CUSTOM_DIR" commit -m "custom: clean up stale entries"
+        fi
+        ok "Cleaned up stale entries"
+    fi
+}
+
+# ─── Add workflow ─────────────────────────────────────────────────────────────
+
+add_custom_package() {
+    printf 'Enter path to config file or directory (e.g., ~/.config/alacritty): '
+    read -r source_path
+
+    [[ -z "$source_path" ]] && return 1
+
+    # Expand ~ to $HOME
+    source_path="${source_path/#\~/$HOME}"
+
+    # Validate: path exists
+    if [[ ! -e "$source_path" ]]; then
+        warn "Path does not exist: $source_path"
+        return 1
+    fi
+
+    # Validate: not already a stow symlink
+    if is_stow_symlink "$source_path"; then
+        warn "Path is already a stow-managed symlink: $source_path"
+        return 1
+    fi
+
+    # Infer and confirm package name
+    local default_name
+    default_name="$(infer_package_name "$source_path")"
+    printf 'Package name [%s]: ' "$default_name"
+    read -r pkg_name
+    pkg_name="${pkg_name:-$default_name}"
+
+    # Validate: not a default package
+    if in_array "$pkg_name" "${ALL_DEFAULT_PACKAGES[@]}"; then
+        warn "Package name '$pkg_name' conflicts with a default package"
+        return 1
+    fi
+
+    # Validate: not already a custom package
+    if in_array "$pkg_name" "${PKG_NAMES[@]}"; then
+        warn "Package '$pkg_name' is already a custom package"
+        return 1
+    fi
+
+    # Validate: directory doesn't already exist in repo
+    if [[ -d "$CUSTOM_DIR/$pkg_name" ]]; then
+        warn "Directory '$pkg_name' already exists in the custom packages directory"
+        return 1
+    fi
+
+    local rel_path
+    rel_path="$(home_relative_path "$source_path")"
+    local pkg_type="full"
+    local recurse_dirs_value=""
+
+    if [[ -d "$source_path" ]]; then
+        # Ask full vs partial
+        printf 'Include entire directory, or select specific items? [f]ull / [p]artial: '
+        read -r dir_mode
+
+        case "${dir_mode,,}" in
+        p | partial)
+            pkg_type="partial"
+            recurse_dirs_value="$rel_path"
+
+            # List directory contents for selection
+            local -a entries=()
+            while IFS= read -r entry; do
+                entries+=("$entry")
+            done < <(ls -A1 "$source_path")
+
+            if ((${#entries[@]} == 0)); then
+                warn "Directory is empty"
+                return 1
+            fi
+
+            info "Contents of $source_path:"
+            for i in "${!entries[@]}"; do
+                local marker=""
+                if [[ -d "$source_path/${entries[$i]}" ]]; then
+                    marker="/"
+                fi
+                printf '  %d) %s%s\n' "$((i + 1))" "${entries[$i]}" "$marker"
+            done
+            printf 'Enter numbers to include (space-separated): '
+            read -r selections
+
+            [[ -z "$selections" ]] && { warn "No items selected"; return 1; }
+
+            # Create package directory with stow layout
+            local pkg_dir="$CUSTOM_DIR/$pkg_name/$rel_path"
+            mkdir -p "$pkg_dir"
+
+            for sel in $selections; do
+                if [[ "$sel" =~ ^[0-9]+$ ]] && ((sel >= 1 && sel <= ${#entries[@]})); then
+                    local item="${entries[$((sel - 1))]}"
+                    cp -a "$source_path/$item" "$pkg_dir/$item"
+                    info "  Added: $item"
+                else
+                    warn "  Invalid selection: $sel"
+                fi
+            done
+            ;;
+        f | full | "")
+            pkg_type="full"
+            # Create package directory with stow layout
+            local pkg_dir="$CUSTOM_DIR/$pkg_name/$rel_path"
+            mkdir -p "$(dirname "$pkg_dir")"
+            cp -a "$source_path" "$pkg_dir"
+            info "  Copied full directory: $source_path"
+            ;;
+        *)
+            warn "Unrecognized input, defaulting to full"
+            pkg_type="full"
+            local pkg_dir="$CUSTOM_DIR/$pkg_name/$rel_path"
+            mkdir -p "$(dirname "$pkg_dir")"
+            cp -a "$source_path" "$pkg_dir"
+            info "  Copied full directory: $source_path"
+            ;;
+        esac
+    else
+        # Single file
+        local pkg_dir="$CUSTOM_DIR/$pkg_name/$(dirname "$rel_path")"
+        mkdir -p "$pkg_dir"
+        cp -a "$source_path" "$pkg_dir/$(basename "$source_path")"
+        info "  Copied file: $source_path"
+    fi
+
+    # Collapse tilde for display in tracking file
+    local display_source="~/${rel_path}"
+
+    # Update tracking arrays and write
+    PKG_NAMES+=("$pkg_name")
+    PKG_SOURCES+=("$display_source")
+    PKG_TYPES+=("$pkg_type")
+    PKG_RECURSE_DIRS+=("$recurse_dirs_value")
+    write_custom_packages
+
+    # Auto-commit
+    if [[ -d "$CUSTOM_DIR/.git" ]]; then
+        git -C "$CUSTOM_DIR" add "$pkg_name" .custom-packages
+        git -C "$CUSTOM_DIR" commit -m "custom: add $pkg_name package"
+    fi
+    ok_changed "Added custom package: $pkg_name"
+    return 0
+}
+
+# ─── Remove workflow ──────────────────────────────────────────────────────────
+
+remove_custom_package() {
+    read_custom_packages
+
+    if ((${#PKG_NAMES[@]} == 0)); then
+        warn "No custom packages to remove"
+        return 1
+    fi
+
+    info "Custom packages:"
+    for i in "${!PKG_NAMES[@]}"; do
+        printf '  %d) %s (%s, %s)\n' "$((i + 1))" "${PKG_NAMES[$i]}" "${PKG_SOURCES[$i]}" "${PKG_TYPES[$i]}"
+    done
+    printf 'Enter numbers to remove (space-separated), or Enter to cancel: '
+    read -r selections
+
+    [[ -z "$selections" ]] && return 1
+
+    local -a to_remove=()
+    for sel in $selections; do
+        if [[ "$sel" =~ ^[0-9]+$ ]] && ((sel >= 1 && sel <= ${#PKG_NAMES[@]})); then
+            to_remove+=("${PKG_NAMES[$((sel - 1))]}")
+        else
+            warn "  Invalid selection: $sel"
+        fi
+    done
+
+    for pkg in "${to_remove[@]}"; do
+        # Unstow and restore backups
+        unstow_custom_package "$pkg"
+
+        # Remove package directory from repo
+        if [[ -d "$CUSTOM_DIR/$pkg" ]]; then
+            rm -rf "$CUSTOM_DIR/$pkg"
+            info "  Removed directory: $pkg"
+        fi
+    done
+
+    # Rebuild arrays without removed packages
+    local -a new_names=() new_sources=() new_types=() new_recurse=()
+    for i in "${!PKG_NAMES[@]}"; do
+        if ! in_array "${PKG_NAMES[$i]}" "${to_remove[@]}"; then
+            new_names+=("${PKG_NAMES[$i]}")
+            new_sources+=("${PKG_SOURCES[$i]}")
+            new_types+=("${PKG_TYPES[$i]}")
+            new_recurse+=("${PKG_RECURSE_DIRS[$i]}")
+        fi
+    done
+    PKG_NAMES=("${new_names[@]}")
+    PKG_SOURCES=("${new_sources[@]}")
+    PKG_TYPES=("${new_types[@]}")
+    PKG_RECURSE_DIRS=("${new_recurse[@]}")
+    write_custom_packages
+
+    # Auto-commit
+    if [[ -d "$CUSTOM_DIR/.git" ]]; then
+        cd "$CUSTOM_DIR"
+        for pkg in "${to_remove[@]}"; do
+            git add -A "$pkg" 2>/dev/null || true
+        done
+        git add .custom-packages
+        git commit -m "custom: remove ${to_remove[*]}"
+    fi
+    ok_changed "Removed custom package(s): ${to_remove[*]}"
+    return 0
+}
+
+# ─── Main ─────────────────────────────────────────────────────────────────────
+
+info "Phase 0: Custom dotfiles packages"
+
+# Check if .custom-packages exists — if not and no intent to add, skip quickly
+if [[ ! -f "$CUSTOM_FILE" ]]; then
+    printf 'No custom packages configured. Add custom configs to dotfiles? (y/N): '
+    read -r want_custom
+    if [[ ! "$want_custom" =~ ^[Yy]$ ]]; then
+        ok "Skipping custom packages"
+        exit 0
+    fi
+fi
+
+# Ensure custom directory exists
+if ! ensure_custom_dir; then
+    info "Cancelled."
+    exit 0
+fi
+
+# Consistency check
+verify_custom_packages
+
+# Reload after potential cleanup
+read_custom_packages
+
+# Interactive add/remove loop
+while true; do
+    if ((${#PKG_NAMES[@]} > 0)); then
+        info "Current custom packages: ${PKG_NAMES[*]}"
+    else
+        info "No custom packages configured"
+    fi
+
+    printf '[a]dd / [r]emove / Enter to finish: '
+    read -r action
+
+    case "${action,,}" in
+    a | add)
+        add_custom_package || true
+        read_custom_packages  # refresh arrays
+        ;;
+    r | remove)
+        remove_custom_package || true
+        read_custom_packages  # refresh arrays
+        ;;
+    "")
+        break
+        ;;
+    *)
+        warn "Unrecognized input '$action'"
+        ;;
+    esac
+done
+
+if ((${#PKG_NAMES[@]} > 0)); then
+    ok "Custom packages: ${PKG_NAMES[*]}"
+else
+    ok "No custom packages"
+fi

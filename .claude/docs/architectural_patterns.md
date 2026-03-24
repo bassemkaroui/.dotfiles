@@ -101,6 +101,44 @@ After detection, the result is persisted to `.dotfiles/.device-type` (git-ignore
 
 ---
 
+## Custom Packages Extension
+
+**Pattern:** Users can add their own config packages in a sibling directory (`~/.dotfiles-custom/`), tracked via an INI-style `.custom-packages` file. Custom packages integrate with the existing stow deployment pipeline but live entirely outside the main dotfiles repo.
+
+**Implementation:**
+- `setup:custom-dotfiles` task manages the lifecycle (add/remove/verify)
+- Custom packages live in `~/.dotfiles-custom/` (override via `DOTFILES_CUSTOM_DIR` env var)
+- `.custom-packages` (INI format) inside the sibling dir tracks package name, source path, type (full/partial), and recurse_dirs
+- The sibling directory can optionally be its own git repo (auto-commits are conditional on `.git` existing)
+- `setup:dotfiles` loads `.custom-packages` at startup, extending `CUSTOM_PACKAGES` and `RECURSE_DIRS` arrays
+- Deployment uses `stow -d ~/.dotfiles-custom` to stow from the sibling directory
+
+**Add workflow:**
+1. Ensure sibling directory exists (create + optional `git init` if needed)
+2. Copy config into stow package layout (`<name>/<home-relative-path>/`)
+3. For partial directories: only selected items are copied; parent dir added to `RECURSE_DIRS`
+4. Update `.custom-packages`, auto-commit (if git repo)
+5. Stowing and backup handled by `setup:dotfiles` on next run
+
+**Remove workflow:**
+1. Unstow via `stow -D`, restore `.bak` backups
+2. Delete package directory from sibling dir
+3. Update `.custom-packages`, auto-commit (if git repo)
+
+**Integration with stow-exclude:**
+- Custom packages are **excluded** from `.stow-exclude` proposals (never offered for exclusion)
+- If a custom package is found in `.stow-exclude`, a warning is shown and the entry is removed
+
+**Benefits over branch-based approach:**
+- Custom packages always present regardless of git state on main repo
+- No branch-switching mental overhead
+- Each machine has its own independent custom directory
+- Main repo stays pristine for upstream updates
+
+**When applying:** Use `setup:custom-dotfiles` to manage any config not covered by default packages. See [CUSTOM-PACKAGES.md](../../CUSTOM-PACKAGES.md) for user-facing docs.
+
+---
+
 ## Nested Stow (Meta-Configuration)
 
 **Pattern:** The Mise tool itself is configured via a Stow package (`mise/`), enabling version control of the task automation system.
