@@ -11,8 +11,16 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../lib/helpers.sh"
 DOTFILES_DIR="$HOME/.dotfiles"
 CUSTOM_DIR="${DOTFILES_CUSTOM_DIR:-$HOME/.dotfiles-custom}"
 CUSTOM_FILE="$CUSTOM_DIR/.custom-packages"
+DEVICE_TAG_FILE="$DOTFILES_DIR/.device-tag"
 
-# Default packages (must match setup:dotfiles arrays)
+# Read current device tag (default to "default" if not set)
+if [[ -f "$DEVICE_TAG_FILE" ]]; then
+    DEVICE_TAG="$(<"$DEVICE_TAG_FILE")"
+else
+    DEVICE_TAG="default"
+fi
+
+# Default packages (must match setup:dotfiles array)
 ALL_DEFAULT_PACKAGES=(bash fzf git gnome_themes gpg zsh tmux bat yazi mise nvim gh gh-dash claude ghostty ssh p10k)
 
 # Known non-package directories at repo root
@@ -22,33 +30,37 @@ NON_PKG_DIRS=(.git .github .claude scripts)
 
 # Parallel arrays populated by read_custom_packages()
 PKG_NAMES=()
+PKG_TAGS=()
 PKG_SOURCES=()
 PKG_TYPES=()
 PKG_RECURSE_DIRS=()
 
 read_custom_packages() {
     PKG_NAMES=()
+    PKG_TAGS=()
     PKG_SOURCES=()
     PKG_TYPES=()
     PKG_RECURSE_DIRS=()
 
     [[ -f "$CUSTOM_FILE" ]] || return 0
 
-    local current_name="" current_source="" current_type="" current_recurse=""
+    local current_name="" current_tag="" current_source="" current_type="" current_recurse=""
 
     while IFS= read -r line; do
         line="${line%%#*}"           # strip comments
         [[ -z "${line// /}" ]] && continue
 
-        if [[ "$line" =~ ^\[(.+)\]$ ]]; then
+        if [[ "$line" =~ ^\[([^:]+)(:(.+))?\]$ ]]; then
             # Save previous package if any
             if [[ -n "$current_name" ]]; then
                 PKG_NAMES+=("$current_name")
+                PKG_TAGS+=("$current_tag")
                 PKG_SOURCES+=("$current_source")
                 PKG_TYPES+=("$current_type")
                 PKG_RECURSE_DIRS+=("$current_recurse")
             fi
             current_name="${BASH_REMATCH[1]}"
+            current_tag="${BASH_REMATCH[3]:-default}"
             current_source=""
             current_type="full"
             current_recurse=""
@@ -66,6 +78,7 @@ read_custom_packages() {
     # Don't forget last package
     if [[ -n "$current_name" ]]; then
         PKG_NAMES+=("$current_name")
+        PKG_TAGS+=("$current_tag")
         PKG_SOURCES+=("$current_source")
         PKG_TYPES+=("$current_type")
         PKG_RECURSE_DIRS+=("$current_recurse")
@@ -78,7 +91,11 @@ write_custom_packages() {
         printf '# Do not edit manually — use: mise run setup:custom-dotfiles\n\n'
 
         for i in "${!PKG_NAMES[@]}"; do
-            printf '[%s]\n' "${PKG_NAMES[$i]}"
+            if [[ "${PKG_TAGS[$i]}" == "default" ]]; then
+                printf '[%s]\n' "${PKG_NAMES[$i]}"
+            else
+                printf '[%s:%s]\n' "${PKG_NAMES[$i]}" "${PKG_TAGS[$i]}"
+            fi
             printf 'source=%s\n' "${PKG_SOURCES[$i]}"
             printf 'type=%s\n' "${PKG_TYPES[$i]}"
             if [[ -n "${PKG_RECURSE_DIRS[$i]}" ]]; then
@@ -112,41 +129,46 @@ next_backup_path() {
     printf '%s' "$backup"
 }
 
-# Unstow a package and restore backups
+# Unstow a package (all tag-* variants) and restore backups
 unstow_custom_package() {
     local pkg="$1"
     local pkg_dir="$CUSTOM_DIR/$pkg"
 
-    if [[ -d "$pkg_dir" ]]; then
-        stow -D -d "$CUSTOM_DIR" -t "$HOME" "$pkg" 2>/dev/null || true
-        info "  Unstowed package: $pkg"
-    fi
+    # Unstow all tag-* variants
+    for tag_dir in "$pkg_dir"/tag-*/; do
+        [[ -d "$tag_dir" ]] || continue
+        local tag_name
+        tag_name="$(basename "$tag_dir")"
+        stow -D -d "$pkg_dir" -t "$HOME" "$tag_name" 2>/dev/null || true
+        info "  Unstowed: $pkg/$tag_name"
+    done
 
     [[ -d "$pkg_dir" ]] || return 0
 
-    # Restore backups: find files that belong to this package
-    while IFS= read -r -d '' rel_path; do
-        [[ -z "$rel_path" ]] && continue
-        local target="$HOME/$rel_path"
-        # Find the highest numbered backup
-        local restore_from=""
-        local i=1
-        if [[ -e "$target.bak" ]]; then
-            restore_from="$target.bak"
-        fi
-        while [[ -e "$target.bak.$i" ]]; do
-            restore_from="$target.bak.$i"
-            ((i++))
-        done
-        if [[ -n "$restore_from" ]]; then
-            # Ensure parent directory exists
-            mkdir -p "$(dirname "$target")"
-            mv "$restore_from" "$target"
-            info "  Restored: $restore_from -> $target"
-        fi
-    done < <(find "$pkg_dir" -mindepth 1 \( -type f -o -type l \) \
-        -not -path '*/.git/*' -not -name '.git' \
-        -printf '%P\0' 2>/dev/null)
+    # Restore backups from all tag variants
+    for tag_dir in "$pkg_dir"/tag-*/; do
+        [[ -d "$tag_dir" ]] || continue
+        while IFS= read -r -d '' rel_path; do
+            [[ -z "$rel_path" ]] && continue
+            local target="$HOME/$rel_path"
+            local restore_from=""
+            local i=1
+            if [[ -e "$target.bak" ]]; then
+                restore_from="$target.bak"
+            fi
+            while [[ -e "$target.bak.$i" ]]; do
+                restore_from="$target.bak.$i"
+                ((i++))
+            done
+            if [[ -n "$restore_from" ]]; then
+                mkdir -p "$(dirname "$target")"
+                mv "$restore_from" "$target"
+                info "  Restored: $restore_from -> $target"
+            fi
+        done < <(find "$tag_dir" -mindepth 1 \( -type f -o -type l \) \
+            -not -path '*/.git/*' -not -name '.git' \
+            -printf '%P\0' 2>/dev/null)
+    done
 }
 
 # Compute the relative path from $HOME to a given path
@@ -211,33 +233,36 @@ verify_custom_packages() {
     read_custom_packages
 
     local dirty=false
-    local -a to_remove=()
+    local -a remove_indices=()
 
     for i in "${!PKG_NAMES[@]}"; do
         local name="${PKG_NAMES[$i]}"
-        if [[ ! -d "$CUSTOM_DIR/$name" ]]; then
-            warn "Custom package '$name' listed in .custom-packages but directory missing in repo"
+        local tag="${PKG_TAGS[$i]}"
+        local tag_dir="$CUSTOM_DIR/$name/tag-$tag"
+        if [[ ! -d "$tag_dir" ]]; then
+            warn "Custom package '$name' (tag: $tag) — directory missing: $tag_dir"
             printf '  Remove from tracking file? (y/N): '
             read -r confirm
             if [[ "$confirm" =~ ^[Yy]$ ]]; then
-                to_remove+=("$name")
+                remove_indices+=("$i")
                 dirty=true
             fi
         fi
     done
 
     if [[ "$dirty" == "true" ]]; then
-        # Rebuild arrays without removed packages
-        local -a new_names=() new_sources=() new_types=() new_recurse=()
+        local -a new_names=() new_tags=() new_sources=() new_types=() new_recurse=()
         for i in "${!PKG_NAMES[@]}"; do
-            if ! in_array "${PKG_NAMES[$i]}" "${to_remove[@]}"; then
+            if ! in_array "$i" "${remove_indices[@]}"; then
                 new_names+=("${PKG_NAMES[$i]}")
+                new_tags+=("${PKG_TAGS[$i]}")
                 new_sources+=("${PKG_SOURCES[$i]}")
                 new_types+=("${PKG_TYPES[$i]}")
                 new_recurse+=("${PKG_RECURSE_DIRS[$i]}")
             fi
         done
         PKG_NAMES=("${new_names[@]}")
+        PKG_TAGS=("${new_tags[@]}")
         PKG_SOURCES=("${new_sources[@]}")
         PKG_TYPES=("${new_types[@]}")
         PKG_RECURSE_DIRS=("${new_recurse[@]}")
@@ -286,15 +311,29 @@ add_custom_package() {
         return 1
     fi
 
-    # Validate: not already a custom package
-    if in_array "$pkg_name" "${PKG_NAMES[@]}"; then
-        warn "Package '$pkg_name' is already a custom package"
-        return 1
+    # Choose tag
+    local pkg_tag="default"
+    if [[ "$DEVICE_TAG" != "default" ]]; then
+        printf 'Tag this config as? [d]efault / [m]achine tag (%s) / Enter for default: ' "$DEVICE_TAG"
+        read -r tag_choice
+        case "${tag_choice,,}" in
+        m | machine) pkg_tag="$DEVICE_TAG" ;;
+        d | default | "") pkg_tag="default" ;;
+        *) warn "Unrecognized input, using default"; pkg_tag="default" ;;
+        esac
     fi
 
-    # Validate: directory doesn't already exist in repo
-    if [[ -d "$CUSTOM_DIR/$pkg_name" ]]; then
-        warn "Directory '$pkg_name' already exists in the custom packages directory"
+    # Validate: (name, tag) not already a custom package
+    for i in "${!PKG_NAMES[@]}"; do
+        if [[ "${PKG_NAMES[$i]}" == "$pkg_name" && "${PKG_TAGS[$i]}" == "$pkg_tag" ]]; then
+            warn "Package '$pkg_name' (tag: $pkg_tag) is already a custom package"
+            return 1
+        fi
+    done
+
+    # Validate: tag directory doesn't already exist
+    if [[ -d "$CUSTOM_DIR/$pkg_name/tag-$pkg_tag" ]]; then
+        warn "Directory '$pkg_name/tag-$pkg_tag' already exists in the custom packages directory"
         return 1
     fi
 
@@ -337,8 +376,8 @@ add_custom_package() {
 
             [[ -z "$selections" ]] && { warn "No items selected"; return 1; }
 
-            # Create package directory with stow layout
-            local pkg_dir="$CUSTOM_DIR/$pkg_name/$rel_path"
+            # Create package directory with tagged stow layout
+            local pkg_dir="$CUSTOM_DIR/$pkg_name/tag-$pkg_tag/$rel_path"
             mkdir -p "$pkg_dir"
 
             for sel in $selections; do
@@ -353,8 +392,8 @@ add_custom_package() {
             ;;
         f | full | "")
             pkg_type="full"
-            # Create package directory with stow layout
-            local pkg_dir="$CUSTOM_DIR/$pkg_name/$rel_path"
+            # Create package directory with tagged stow layout
+            local pkg_dir="$CUSTOM_DIR/$pkg_name/tag-$pkg_tag/$rel_path"
             mkdir -p "$(dirname "$pkg_dir")"
             cp -a "$source_path" "$pkg_dir"
             info "  Copied full directory: $source_path"
@@ -362,7 +401,7 @@ add_custom_package() {
         *)
             warn "Unrecognized input, defaulting to full"
             pkg_type="full"
-            local pkg_dir="$CUSTOM_DIR/$pkg_name/$rel_path"
+            local pkg_dir="$CUSTOM_DIR/$pkg_name/tag-$pkg_tag/$rel_path"
             mkdir -p "$(dirname "$pkg_dir")"
             cp -a "$source_path" "$pkg_dir"
             info "  Copied full directory: $source_path"
@@ -370,7 +409,7 @@ add_custom_package() {
         esac
     else
         # Single file
-        local pkg_dir="$CUSTOM_DIR/$pkg_name/$(dirname "$rel_path")"
+        local pkg_dir="$CUSTOM_DIR/$pkg_name/tag-$pkg_tag/$(dirname "$rel_path")"
         mkdir -p "$pkg_dir"
         cp -a "$source_path" "$pkg_dir/$(basename "$source_path")"
         info "  Copied file: $source_path"
@@ -381,6 +420,7 @@ add_custom_package() {
 
     # Update tracking arrays and write
     PKG_NAMES+=("$pkg_name")
+    PKG_TAGS+=("$pkg_tag")
     PKG_SOURCES+=("$display_source")
     PKG_TYPES+=("$pkg_type")
     PKG_RECURSE_DIRS+=("$recurse_dirs_value")
@@ -389,9 +429,9 @@ add_custom_package() {
     # Auto-commit
     if [[ -d "$CUSTOM_DIR/.git" ]]; then
         git -C "$CUSTOM_DIR" add "$pkg_name" .custom-packages
-        git -C "$CUSTOM_DIR" commit -m "custom: add $pkg_name package"
+        git -C "$CUSTOM_DIR" commit -m "custom: add $pkg_name (tag: $pkg_tag)"
     fi
-    ok_changed "Added custom package: $pkg_name"
+    ok_changed "Added custom package: $pkg_name (tag: $pkg_tag)"
     return 0
 }
 
@@ -405,46 +445,98 @@ remove_custom_package() {
         return 1
     fi
 
-    info "Custom packages:"
+    # Filter to only show entries matching current device tag or default
+    local -a filtered_indices=()
     for i in "${!PKG_NAMES[@]}"; do
-        printf '  %d) %s (%s, %s)\n' "$((i + 1))" "${PKG_NAMES[$i]}" "${PKG_SOURCES[$i]}" "${PKG_TYPES[$i]}"
+        if [[ "${PKG_TAGS[$i]}" == "$DEVICE_TAG" || "${PKG_TAGS[$i]}" == "default" ]]; then
+            filtered_indices+=("$i")
+        fi
+    done
+
+    if ((${#filtered_indices[@]} == 0)); then
+        warn "No custom packages matching current device tag '$DEVICE_TAG'"
+        return 1
+    fi
+
+    info "Custom packages (tag: $DEVICE_TAG):"
+    local display_num=1
+    for i in "${filtered_indices[@]}"; do
+        local tag_display="${PKG_TAGS[$i]}"
+        printf '  %d) %s:%s (%s, %s)\n' "$display_num" "${PKG_NAMES[$i]}" "$tag_display" "${PKG_SOURCES[$i]}" "${PKG_TYPES[$i]}"
+        ((display_num++))
     done
     printf 'Enter numbers to remove (space-separated), or Enter to cancel: '
     read -r selections
 
     [[ -z "$selections" ]] && return 1
 
-    local -a to_remove=()
+    # Map user selections back to original array indices
+    local -a remove_indices=()
     for sel in $selections; do
-        if [[ "$sel" =~ ^[0-9]+$ ]] && ((sel >= 1 && sel <= ${#PKG_NAMES[@]})); then
-            to_remove+=("${PKG_NAMES[$((sel - 1))]}")
+        if [[ "$sel" =~ ^[0-9]+$ ]] && ((sel >= 1 && sel <= ${#filtered_indices[@]})); then
+            remove_indices+=("${filtered_indices[$((sel - 1))]}")
         else
             warn "  Invalid selection: $sel"
         fi
     done
 
-    for pkg in "${to_remove[@]}"; do
-        # Unstow and restore backups
-        unstow_custom_package "$pkg"
+    local -a git_dirs=()
+    for idx in "${remove_indices[@]}"; do
+        local pkg="${PKG_NAMES[$idx]}"
+        local tag="${PKG_TAGS[$idx]}"
 
-        # Remove package directory from repo
-        if [[ -d "$CUSTOM_DIR/$pkg" ]]; then
-            rm -rf "$CUSTOM_DIR/$pkg"
-            info "  Removed directory: $pkg"
+        # Unstow the specific tagged variant
+        local tag_dir="$CUSTOM_DIR/$pkg/tag-$tag"
+        if [[ -d "$tag_dir" ]]; then
+            info "  Unstowing $pkg (tag: $tag)..."
+            stow -D -d "$CUSTOM_DIR/$pkg" -t "$HOME" "tag-$tag" 2>/dev/null || true
+
+            # Restore any .bak backups
+            while IFS= read -r -d '' bak_file; do
+                local orig="${bak_file%.bak}"
+                if [[ ! -e "$orig" ]]; then
+                    mv "$bak_file" "$orig"
+                    info "  Restored backup: $orig"
+                fi
+            done < <(find "$HOME" -name "*.bak" -print0 2>/dev/null || true)
+
+            rm -rf "$tag_dir"
+            info "  Removed tag directory: $pkg/tag-$tag"
         fi
+
+        # If no tag-* dirs remain, remove the entire package directory
+        if [[ -d "$CUSTOM_DIR/$pkg" ]]; then
+            local remaining_tags
+            remaining_tags=$(find "$CUSTOM_DIR/$pkg" -maxdepth 1 -type d -name 'tag-*' 2>/dev/null | wc -l)
+            if ((remaining_tags == 0)); then
+                rm -rf "$CUSTOM_DIR/$pkg"
+                info "  Removed package directory: $pkg (no tagged variants remain)"
+            fi
+        fi
+
+        git_dirs+=("$pkg")
     done
 
-    # Rebuild arrays without removed packages
-    local -a new_names=() new_sources=() new_types=() new_recurse=()
+    # Rebuild arrays without removed entries
+    local -a new_names=() new_tags=() new_sources=() new_types=() new_recurse=()
     for i in "${!PKG_NAMES[@]}"; do
-        if ! in_array "${PKG_NAMES[$i]}" "${to_remove[@]}"; then
+        local keep=true
+        for idx in "${remove_indices[@]}"; do
+            if ((i == idx)); then
+                keep=false
+                break
+            fi
+        done
+        if [[ "$keep" == true ]]; then
             new_names+=("${PKG_NAMES[$i]}")
+            new_tags+=("${PKG_TAGS[$i]}")
             new_sources+=("${PKG_SOURCES[$i]}")
             new_types+=("${PKG_TYPES[$i]}")
             new_recurse+=("${PKG_RECURSE_DIRS[$i]}")
         fi
     done
     PKG_NAMES=("${new_names[@]}")
+    PKG_TAGS=("${new_tags[@]}")
     PKG_SOURCES=("${new_sources[@]}")
     PKG_TYPES=("${new_types[@]}")
     PKG_RECURSE_DIRS=("${new_recurse[@]}")
@@ -453,13 +545,13 @@ remove_custom_package() {
     # Auto-commit
     if [[ -d "$CUSTOM_DIR/.git" ]]; then
         cd "$CUSTOM_DIR"
-        for pkg in "${to_remove[@]}"; do
+        for pkg in "${git_dirs[@]}"; do
             git add -A "$pkg" 2>/dev/null || true
         done
         git add .custom-packages
-        git commit -m "custom: remove ${to_remove[*]}"
+        git commit -m "custom: remove ${git_dirs[*]}"
     fi
-    ok_changed "Removed custom package(s): ${to_remove[*]}"
+    ok_changed "Removed custom package(s): ${git_dirs[*]}"
     return 0
 }
 
@@ -492,7 +584,12 @@ read_custom_packages
 # Interactive add/remove loop
 while true; do
     if ((${#PKG_NAMES[@]} > 0)); then
-        info "Current custom packages: ${PKG_NAMES[*]}"
+        local pkg_list=""
+        for i in "${!PKG_NAMES[@]}"; do
+            [[ -n "$pkg_list" ]] && pkg_list+=", "
+            pkg_list+="${PKG_NAMES[$i]}:${PKG_TAGS[$i]}"
+        done
+        info "Current custom packages: $pkg_list"
     else
         info "No custom packages configured"
     fi

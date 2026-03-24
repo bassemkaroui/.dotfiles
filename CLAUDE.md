@@ -2,7 +2,7 @@
 
 ## Overview
 
-A modular dotfiles management system using **GNU Stow** for clean symlink-based deployment and **Mise** for task automation. Configures a complete development environment across 16 config packages with device-aware (laptop/desktop) variants.
+A modular dotfiles management system using **GNU Stow** for clean symlink-based deployment and **Mise** for task automation. Configures a complete development environment across 16 config packages with tag-based device variants.
 
 ## Tech Stack
 
@@ -18,24 +18,25 @@ A modular dotfiles management system using **GNU Stow** for clean symlink-based 
 
 ```
 .dotfiles/
-├── bash/, zsh/        → Shell configurations
-├── git/              → Git config & helpers
-├── tmux/             → Tmux (oh-my-tmux submodule)
-├── nvim/             → Neovim config (git submodule)
-├── p10k/             → Powerlevel10k prompt (laptop/desktop variants)
-├── ssh/              → SSH configs (laptop/desktop variants)
-├── fzf/, yazi/, bat/ → CLI tool configs
-├── gh/, gh-dash/     → GitHub CLI & dashboard configs
-├── claude/           → Claude Code IDE config (settings, keybindings, plugins)
-├── mise/             → Mise tool config (nested stow)
-├── gpg/, gnome_themes/, ruby/ → Additional tools
+├── bash/             → Shell configurations (tag-default/)
+├── zsh/              → Zsh config (tag-default/)
+├── git/              → Git config & helpers (tag-default/)
+├── tmux/             → Tmux + oh-my-tmux submodule (tag-default/)
+├── nvim/             → Neovim config submodule (tag-default/)
+├── p10k/             → Powerlevel10k prompt (tag-default/)
+├── ssh/              → SSH configs (tag-desktop/, tag-laptop/)
+├── fzf/, yazi/, bat/ → CLI tool configs (tag-default/)
+├── gh/, gh-dash/     → GitHub CLI & dashboard configs (tag-default/)
+├── claude/           → Claude Code IDE config (tag-default/)
+├── mise/             → Mise tool config — nested stow (tag-default/)
+├── gpg/, gnome_themes/, ghostty/ → Additional tools (tag-default/)
 └── .mise.toml        → Root mise task definitions
 ```
 
-**Each directory is a Stow package** that mirrors `~/.` structure:
+**Every package uses `tag-*` subdirectories.** Files inside a tag dir mirror `~/.` structure:
 
-- `bash/.bashrc` → `~/.bashrc` (when stowed)
-- `bat/.config/bat/config` → `~/.config/bat/config`
+- `bash/tag-default/.bashrc` → `~/.bashrc` (when stowed)
+- `bat/tag-default/.config/bat/themes/...` → `~/.config/bat/themes/...`
 
 ## Quick Start
 
@@ -51,9 +52,8 @@ mise run bootstrap      # Full machine setup
 **Manual stow deployment:**
 
 ```bash
-stow -t ~ bash zsh git tmux fzf yazi bat nvim gh gh-dash claude # Core configs
-stow -t ~ mise                            # Mise config
-stow -t ~ -S laptop                       # Device-specific (from p10k/, ssh/)
+stow -d bash -t ~ tag-default              # Deploy a single package (default tag)
+stow -d ssh -t ~ tag-laptop                # Deploy a device-specific variant
 ```
 
 ## Essential Commands
@@ -70,9 +70,10 @@ stow -t ~ -S laptop                       # Device-specific (from p10k/, ssh/)
 ## Key Patterns
 
 - **Modular via Stow:** Each tool in its own package; deploy selectively
-- **Device-aware:** Laptop/desktop variants in `p10k/` and `ssh/`; auto-detected and persisted to `.device-type`
+- **Uniform tag layout:** All packages use `tag-*` subdirectories (e.g., `bash/tag-default/`, `ssh/tag-laptop/`). Deployed based on `.device-tag` with fallback to `tag-default/`
+- **Graphical detection:** Ghostty installation checks for graphical environment (`$DISPLAY`, `$WAYLAND_DISPLAY`, etc.) instead of device type. Override via `.graphical-env`
 - **Per-machine exclusions:** `.stow-exclude` (gitignored) lists packages to skip on a specific machine; managed interactively by `setup:dotfiles`
-- **Custom packages:** Users can add their own config packages in a sibling directory (`~/.dotfiles-custom/`) via `setup:custom-dotfiles`. Tracked in `.custom-packages` (INI-style). Custom packages are immune to `.stow-exclude` and deployed alongside defaults via `stow -d ~/.dotfiles-custom`. See [CUSTOM-PACKAGES.md](CUSTOM-PACKAGES.md)
+- **Custom packages:** Users can add their own config packages in a sibling directory (`~/.dotfiles-custom/`) via `setup:custom-dotfiles`. Tracked in `.custom-packages` (INI-style with `[name:tag]` sections). Custom packages are tag-aware and immune to `.stow-exclude`. See [CUSTOM-PACKAGES.md](CUSTOM-PACKAGES.md)
 - **XDG compliance:** Configs use `~/.config/` for tool-specific settings
 - **Task-driven:** All setup automation flows through Mise
 - **Nested Stow:** Mise config itself is stowed, enabling config management of the manager

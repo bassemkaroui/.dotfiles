@@ -1,24 +1,20 @@
-/tmux/.config/tmux/plugins/
+/tmux/tag-default/.config/tmux/plugins/
 *.backup
 *.backup1
-.device-type
+.device-tag
+.graphical-env
 .stow-exclude
-zsh/.config/completions/_*
-gpg/.gnupg/*
-!gpg/.gnupg/gpg-agent.conf
-gh/.config/gh/hosts.yml
-gh/.config/gh/state.yml
-claude/.claude/*
-!claude/.claude/commands
-# !claude/.claude/plugins
-!claude/.claude/skills
-!claude/.claude/agents
-!claude/.claude/.editorconfig
-!claude/.claude/CLAUDE.md
-!claude/.claude/keybindings.json
-!claude/.claude/settings.json
-!claude/.claude/statusline-command.sh
-# claude/.claude/plugins/*
-# !claude/.claude/plugins/installed_plugins.json
-# !claude/.claude/plugins/known_marketplaces.json
-# !claude/.claude/plugins/blocklist.json
+zsh/tag-default/.config/completions/_*
+gpg/tag-default/.gnupg/*
+!gpg/tag-default/.gnupg/gpg-agent.conf
+gh/tag-default/.config/gh/hosts.yml
+gh/tag-default/.config/gh/state.yml
+claude/tag-default/.claude/*
+!claude/tag-default/.claude/commands
+!claude/tag-default/.claude/skills
+!claude/tag-default/.claude/agents
+!claude/tag-default/.claude/.editorconfig
+!claude/tag-default/.claude/CLAUDE.md
+!claude/tag-default/.claude/keybindings.json
+!claude/tag-default/.claude/settings.json
+!claude/tag-default/.claude/statusline-command.sh

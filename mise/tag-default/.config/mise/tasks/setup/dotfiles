@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#MISE description="Deploy dotfiles via GNU Stow (clones repo if missing, auto-detects device type)"
+#MISE description="Deploy dotfiles via GNU Stow (clones repo if missing, resolves device tag)"
 #MISE raw=true
 set -eo pipefail
 
@@ -29,32 +29,10 @@ CUSTOM_DIR="${DOTFILES_CUSTOM_DIR:-$HOME/.dotfiles-custom}"
 
 RECURSE_DIRS=(.gnupg .config/gh .claude)
 
-# Load custom packages from .custom-packages (INI-style tracking file)
+# Custom packages arrays — populated after Phase 3 (needs DEVICE_TAG)
 CUSTOM_PACKAGES=()
+CUSTOM_PKG_TAGS=()
 CUSTOM_FILE="$CUSTOM_DIR/.custom-packages"
-if [[ -f "$CUSTOM_FILE" ]]; then
-    local_name="" local_recurse=""
-    while IFS= read -r line; do
-        line="${line%%#*}"
-        [[ -z "${line// /}" ]] && continue
-        if [[ "$line" =~ ^\[(.+)\]$ ]]; then
-            if [[ -n "$local_name" && -d "$CUSTOM_DIR/$local_name" ]]; then
-                CUSTOM_PACKAGES+=("$local_name")
-            fi
-            local_name="${BASH_REMATCH[1]}"
-            local_recurse=""
-        elif [[ "$line" =~ ^recurse_dirs=(.+)$ ]]; then
-            IFS=',' read -ra rdirs <<< "${BASH_REMATCH[1]}"
-            for rd in "${rdirs[@]}"; do
-                rd="${rd// /}"
-                [[ -n "$rd" ]] && RECURSE_DIRS+=("$rd")
-            done
-        fi
-    done <"$CUSTOM_FILE"
-    if [[ -n "$local_name" && -d "$CUSTOM_DIR/$local_name" ]]; then
-        CUSTOM_PACKAGES+=("$local_name")
-    fi
-fi
 
 is_recurse_dir() {
     local path="$1"
@@ -129,6 +107,20 @@ backup_conflicts() {
     done
 }
 
+# Resolve which tag-* subdirectory to use for a package.
+# Sets STOW_TAG_DIR to the resolved subdirectory name (e.g. "tag-laptop"),
+# or empty if no matching tag found (package should be skipped).
+resolve_tag_dir() {
+    local pkg_dir="$1" tag="$2"
+    STOW_TAG_DIR=""
+
+    if [[ -d "$pkg_dir/tag-$tag" ]]; then
+        STOW_TAG_DIR="tag-$tag"
+    elif [[ -d "$pkg_dir/tag-default" ]]; then
+        STOW_TAG_DIR="tag-default"
+    fi
+}
+
 DOTFILES_REPO="git@github.com:bassemkaroui/.dotfiles.git"
 
 # ─── Phase 1: Clone dotfiles repo if missing ─────────────────────────────────
@@ -155,16 +147,16 @@ else
     git clone --recursive "$DOTFILES_REPO" "$DOTFILES_DIR"
 
     # Ensure tmux submodule is on master
-    if [[ -d "$DOTFILES_DIR/tmux/.tmux" ]]; then
+    if [[ -d "$DOTFILES_DIR/tmux/tag-default/.tmux" ]]; then
         info "Checking out tmux submodule to master..."
-        cd "$DOTFILES_DIR/tmux/.tmux"
+        cd "$DOTFILES_DIR/tmux/tag-default/.tmux"
         git checkout master
     fi
 
     # Ensure nvim submodule is on custom_config
-    if [[ -d "$DOTFILES_DIR/nvim/.config/nvim" ]]; then
+    if [[ -d "$DOTFILES_DIR/nvim/tag-default/.config/nvim" ]]; then
         info "Checking out nvim submodule to custom_config..."
-        cd "$DOTFILES_DIR/nvim/.config/nvim"
+        cd "$DOTFILES_DIR/nvim/tag-default/.config/nvim"
         git checkout custom_config
     fi
 
@@ -179,53 +171,99 @@ info "Phase 2: Verify stow"
 command -v stow &>/dev/null || fail "stow not found. Run: mise run install:stow"
 ok "stow available: $(command -v stow)"
 
-# ─── Phase 3: Detect device type ─────────────────────────────────────────────
+# ─── Phase 3: Resolve device tag ─────────────────────────────────────────────
 
-DEVICE_TYPE_FILE="$DOTFILES_DIR/.device-type"
+DEVICE_TAG_FILE="$DOTFILES_DIR/.device-tag"
 
-info "Phase 3: Detect device type"
-if [[ -n "${DOTFILES_DEVICE:-}" ]]; then
-    info "Using DOTFILES_DEVICE from environment: $DOTFILES_DEVICE"
-elif [[ -f "$DEVICE_TYPE_FILE" ]]; then
-    DOTFILES_DEVICE="$(<"$DEVICE_TYPE_FILE")"
-    info "Using persisted device type: $DOTFILES_DEVICE"
-else
-    if ls /sys/class/power_supply/BAT* &>/dev/null 2>&1; then
-        DOTFILES_DEVICE="laptop"
-    else
-        DOTFILES_DEVICE="desktop"
-    fi
-    info "Auto-detected device type: $DOTFILES_DEVICE"
-    printf 'Device type is "%s". Change? [l]aptop / [d]esktop / [n]one / Enter to keep: ' "$DOTFILES_DEVICE"
-    read -r CHANGE_DEVICE
-    case "${CHANGE_DEVICE,,}" in
-    l | laptop)
-        DOTFILES_DEVICE="laptop"
-        info "Switched to: laptop"
-        ;;
-    d | desktop)
-        DOTFILES_DEVICE="desktop"
-        info "Switched to: desktop"
-        ;;
-    n | none)
-        DOTFILES_DEVICE="none"
-        info "Switched to: none (device-specific configs will be skipped)"
-        ;;
-    "") ;; # keep current
-    *) warn "Unrecognized input '$CHANGE_DEVICE', keeping: $DOTFILES_DEVICE" ;;
-    esac
+info "Phase 3: Resolve device tag"
+
+# Read old tag before any changes (for detecting tag switches)
+OLD_DEVICE_TAG=""
+if [[ -f "$DEVICE_TAG_FILE" ]]; then
+    OLD_DEVICE_TAG="$(<"$DEVICE_TAG_FILE")"
 fi
 
-ok "Device type: $DOTFILES_DEVICE"
+if [[ -n "${DOTFILES_TAG:-}" ]]; then
+    DEVICE_TAG="$DOTFILES_TAG"
+    info "Using DOTFILES_TAG from environment: $DEVICE_TAG"
+elif [[ -f "$DEVICE_TAG_FILE" ]]; then
+    DEVICE_TAG="$(<"$DEVICE_TAG_FILE")"
+    info "Using persisted device tag: $DEVICE_TAG"
+else
+    printf 'No device tag set. Tag for this machine [default]: '
+    read -r DEVICE_TAG
+    DEVICE_TAG="${DEVICE_TAG:-default}"
+fi
 
-# Persist device type for future runs
-printf '%s' "$DOTFILES_DEVICE" >"$DEVICE_TYPE_FILE"
+# Validate tag
+if [[ ! "$DEVICE_TAG" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+    fail "Invalid device tag '$DEVICE_TAG'. Must contain only letters, numbers, hyphens, and underscores."
+fi
+
+ok "Device tag: $DEVICE_TAG"
+
+# Persist tag for future runs
+printf '%s' "$DEVICE_TAG" >"$DEVICE_TAG_FILE"
+
+# ─── Load custom packages (needs DEVICE_TAG for tag resolution) ──────────────
+
+if [[ -f "$CUSTOM_FILE" ]]; then
+    local_name="" local_tag=""
+    # Parallel arrays for all entries (before tag filtering)
+    ALL_CUSTOM_NAMES=() ALL_CUSTOM_TAGS=()
+    while IFS= read -r line; do
+        line="${line%%#*}"
+        [[ -z "${line// /}" ]] && continue
+        if [[ "$line" =~ ^\[([^:]+)(:(.+))?\]$ ]]; then
+            [[ -n "$local_name" ]] && ALL_CUSTOM_NAMES+=("$local_name") && ALL_CUSTOM_TAGS+=("$local_tag")
+            local_name="${BASH_REMATCH[1]}"
+            local_tag="${BASH_REMATCH[3]:-default}"
+        elif [[ "$line" =~ ^recurse_dirs=(.+)$ ]]; then
+            IFS=',' read -ra rdirs <<< "${BASH_REMATCH[1]}"
+            for rd in "${rdirs[@]}"; do
+                rd="${rd// /}"
+                [[ -n "$rd" ]] && RECURSE_DIRS+=("$rd")
+            done
+        fi
+    done <"$CUSTOM_FILE"
+    [[ -n "$local_name" ]] && ALL_CUSTOM_NAMES+=("$local_name") && ALL_CUSTOM_TAGS+=("$local_tag")
+
+    # Tag resolution: for each unique package name, pick exact $DEVICE_TAG match,
+    # fall back to "default", or skip
+    declare -A _seen_cpkg
+    for i in "${!ALL_CUSTOM_NAMES[@]}"; do
+        local_name="${ALL_CUSTOM_NAMES[$i]}"
+        local_tag="${ALL_CUSTOM_TAGS[$i]}"
+        # Skip if we already resolved this package
+        [[ -n "${_seen_cpkg[$local_name]+x}" ]] && continue
+
+        resolved_tag=""
+        fallback_tag=""
+        for j in "${!ALL_CUSTOM_NAMES[@]}"; do
+            if [[ "${ALL_CUSTOM_NAMES[$j]}" == "$local_name" ]]; then
+                if [[ "${ALL_CUSTOM_TAGS[$j]}" == "$DEVICE_TAG" ]]; then
+                    resolved_tag="$DEVICE_TAG"
+                    break
+                elif [[ "${ALL_CUSTOM_TAGS[$j]}" == "default" ]]; then
+                    fallback_tag="default"
+                fi
+            fi
+        done
+
+        resolved_tag="${resolved_tag:-$fallback_tag}"
+        if [[ -n "$resolved_tag" ]] && [[ -d "$CUSTOM_DIR/$local_name/tag-$resolved_tag" ]]; then
+            CUSTOM_PACKAGES+=("$local_name")
+            CUSTOM_PKG_TAGS+=("$resolved_tag")
+        fi
+        _seen_cpkg[$local_name]=1
+    done
+    unset _seen_cpkg
+fi
 
 # ─── Phase 3.5: Manage stow exclusions ──────────────────────────────────────
 
 STOW_EXCLUDE_FILE="$DOTFILES_DIR/.stow-exclude"
-ALL_COMMON_PACKAGES=(bash fzf git gnome_themes gpg zsh tmux bat yazi mise nvim gh gh-dash claude ghostty)
-ALL_DEVICE_PACKAGES=(ssh p10k)
+ALL_PACKAGES=(bash fzf git gnome_themes gpg zsh tmux bat yazi mise nvim gh gh-dash claude ghostty ssh p10k)
 
 info "Phase 3.5: Stow exclusions"
 
@@ -234,8 +272,7 @@ if [[ ! -f "$STOW_EXCLUDE_FILE" ]]; then
     cat >"$STOW_EXCLUDE_FILE" <<'HEADER'
 # Stow package exclusion list (per-machine, gitignored)
 # Add one package name per line to skip it during setup:dotfiles
-# Available packages: bash fzf git gnome_themes gpg zsh tmux bat yazi mise nvim gh gh-dash claude ghostty
-# Device packages: ssh p10k
+# Available packages: bash fzf git gnome_themes gpg zsh tmux bat yazi mise nvim gh gh-dash claude ghostty ssh p10k
 HEADER
     info "Created $STOW_EXCLUDE_FILE — edit to skip packages on this machine"
 fi
@@ -276,49 +313,46 @@ in_array() {
 # Unstow a package and restore backups if any exist
 unstow_package() {
     local pkg="$1"
-    local is_device="${2:-false}"
+    local base_dir="${2:-$DOTFILES_DIR}"
 
-    if [[ "$is_device" == "true" ]]; then
-        if [[ -d "$DOTFILES_DIR/$pkg/$DOTFILES_DEVICE" ]]; then
-            stow -D -d "$DOTFILES_DIR/$pkg" -t "$HOME" "$DOTFILES_DEVICE" 2>/dev/null || true
-            info "  Unstowed device package: $pkg ($DOTFILES_DEVICE)"
-        fi
-    else
-        if [[ -d "$DOTFILES_DIR/$pkg" ]]; then
-            stow -D -d "$DOTFILES_DIR" -t "$HOME" "$pkg" 2>/dev/null || true
-            info "  Unstowed package: $pkg"
-        fi
-    fi
+    # Unstow all tag-* variants (user may have switched tags)
+    for tag_dir in "$base_dir/$pkg"/tag-*/; do
+        [[ -d "$tag_dir" ]] || continue
+        local tag_name
+        tag_name="$(basename "$tag_dir")"
+        stow -D -d "$base_dir/$pkg" -t "$HOME" "$tag_name" 2>/dev/null || true
+        info "  Unstowed: $pkg/$tag_name"
+    done
 
     # Restore backups: find .bak files that belong to this package
-    local pkg_dir
-    if [[ "$is_device" == "true" ]]; then
-        pkg_dir="$DOTFILES_DIR/$pkg/$DOTFILES_DEVICE"
-    else
-        pkg_dir="$DOTFILES_DIR/$pkg"
-    fi
-    [[ -d "$pkg_dir" ]] || return 0
+    local -a search_dirs=()
+    for tag_dir in "$base_dir/$pkg"/tag-*/; do
+        [[ -d "$tag_dir" ]] && search_dirs+=("$tag_dir")
+    done
 
-    while IFS= read -r -d '' rel_path; do
-        [[ -z "$rel_path" ]] && continue
-        local target="$HOME/$rel_path"
-        # Find the highest numbered backup
-        local restore_from=""
-        local i=1
-        if [[ -e "$target.bak" ]]; then
-            restore_from="$target.bak"
-        fi
-        while [[ -e "$target.bak.$i" ]]; do
-            restore_from="$target.bak.$i"
-            ((i++))
-        done
-        if [[ -n "$restore_from" ]]; then
-            mv "$restore_from" "$target"
-            info "  Restored: $restore_from -> $target"
-        fi
-    done < <(find "$pkg_dir" -mindepth 1 \( -type f -o -type l \) \
-        -not -path '*/.git/*' -not -name '.git' \
-        -printf '%P\0' 2>/dev/null)
+    for pkg_dir in "${search_dirs[@]}"; do
+        [[ -d "$pkg_dir" ]] || continue
+        while IFS= read -r -d '' rel_path; do
+            [[ -z "$rel_path" ]] && continue
+            local target="$HOME/$rel_path"
+            # Find the highest numbered backup
+            local restore_from=""
+            local i=1
+            if [[ -e "$target.bak" ]]; then
+                restore_from="$target.bak"
+            fi
+            while [[ -e "$target.bak.$i" ]]; do
+                restore_from="$target.bak.$i"
+                ((i++))
+            done
+            if [[ -n "$restore_from" ]]; then
+                mv "$restore_from" "$target"
+                info "  Restored: $restore_from -> $target"
+            fi
+        done < <(find "$pkg_dir" -mindepth 1 \( -type f -o -type l \) \
+            -not -path '*/.git/*' -not -name '.git' \
+            -printf '%P\0' 2>/dev/null)
+    done
 }
 
 # Interactive exclusion management loop
@@ -338,7 +372,7 @@ while true; do
     a | add)
         # Build list of available (non-excluded) packages
         AVAILABLE=()
-        for pkg in "${ALL_COMMON_PACKAGES[@]}" "${ALL_DEVICE_PACKAGES[@]}"; do
+        for pkg in "${ALL_PACKAGES[@]}"; do
             in_array "$pkg" "${EXCLUDED[@]}" && continue
             in_array "$pkg" "${CUSTOM_PACKAGES[@]}" && continue
             AVAILABLE+=("$pkg")
@@ -425,11 +459,7 @@ fi
 # Unstow any newly-excluded packages that have symlinks in $HOME
 read_exclusions
 for pkg in "${EXCLUDED[@]}"; do
-    if in_array "$pkg" "${ALL_DEVICE_PACKAGES[@]}"; then
-        unstow_package "$pkg" true
-    else
-        unstow_package "$pkg" false
-    fi
+    unstow_package "$pkg"
 done
 
 if ((${#EXCLUDED[@]} > 0)); then
@@ -441,86 +471,79 @@ fi
 # ─── Precompute shared directories ───────────────────────────────────────────
 
 # Filter packages based on exclusions
-COMMON_PACKAGES=()
-for pkg in "${ALL_COMMON_PACKAGES[@]}"; do
-    in_array "$pkg" "${EXCLUDED[@]}" || COMMON_PACKAGES+=("$pkg")
-done
-DEVICE_PACKAGES=()
-for pkg in "${ALL_DEVICE_PACKAGES[@]}"; do
-    in_array "$pkg" "${EXCLUDED[@]}" || DEVICE_PACKAGES+=("$pkg")
+PACKAGES=()
+for pkg in "${ALL_PACKAGES[@]}"; do
+    in_array "$pkg" "${EXCLUDED[@]}" || PACKAGES+=("$pkg")
 done
 
 ALL_PKG_DIRS=()
-for pkg in "${COMMON_PACKAGES[@]}"; do
-    ALL_PKG_DIRS+=("$DOTFILES_DIR/$pkg")
+for pkg in "${PACKAGES[@]}"; do
+    resolve_tag_dir "$DOTFILES_DIR/$pkg" "$DEVICE_TAG"
+    if [[ -n "$STOW_TAG_DIR" ]]; then
+        ALL_PKG_DIRS+=("$DOTFILES_DIR/$pkg/$STOW_TAG_DIR")
+    fi
 done
-for pkg in "${DEVICE_PACKAGES[@]}"; do
-    for variant in laptop desktop; do
-        ALL_PKG_DIRS+=("$DOTFILES_DIR/$pkg/$variant")
-    done
-done
-for pkg in "${CUSTOM_PACKAGES[@]}"; do
-    ALL_PKG_DIRS+=("$CUSTOM_DIR/$pkg")
+for i in "${!CUSTOM_PACKAGES[@]}"; do
+    cpkg="${CUSTOM_PACKAGES[$i]}"
+    ctag="${CUSTOM_PKG_TAGS[$i]}"
+    if [[ -d "$CUSTOM_DIR/$cpkg/tag-$ctag" ]]; then
+        ALL_PKG_DIRS+=("$CUSTOM_DIR/$cpkg/tag-$ctag")
+    fi
 done
 
 compute_shared_dirs "${ALL_PKG_DIRS[@]}"
 
-# ─── Phase 4: Deploy common packages ─────────────────────────────────────────
+# ─── Phase 4: Deploy packages ───────────────────────────────────────────────
 
-info "Phase 4: Deploy common stow packages"
+info "Phase 4: Deploy stow packages (tag: $DEVICE_TAG)"
 
-for pkg in "${COMMON_PACKAGES[@]}"; do
+STOWED_PACKAGES=()
+
+for pkg in "${PACKAGES[@]}"; do
     if [[ ! -d "$DOTFILES_DIR/$pkg" ]]; then
         warn "Package directory '$pkg' not found, skipping"
         continue
     fi
-    backup_conflicts "$DOTFILES_DIR/$pkg" "$HOME"
-    stow -d "$DOTFILES_DIR" -R -t "$HOME" "$pkg" 2>&1 | { grep -v '^BUG in find_stowed_path' || true; } | while read -r line; do
-        info "  $line"
-    done
-done
-ok_changed "Common packages deployed: ${COMMON_PACKAGES[*]}"
 
-# Deploy custom packages (from sibling directory)
-if ((${#CUSTOM_PACKAGES[@]} > 0)); then
-    info "Deploying custom packages (from $CUSTOM_DIR)"
-    for pkg in "${CUSTOM_PACKAGES[@]}"; do
-        if [[ ! -d "$CUSTOM_DIR/$pkg" ]]; then
-            warn "Custom package '$pkg' listed but directory missing in $CUSTOM_DIR, skipping"
-            continue
-        fi
-        backup_conflicts "$CUSTOM_DIR/$pkg" "$HOME"
-        stow -d "$CUSTOM_DIR" -R -t "$HOME" "$pkg" 2>&1 | { grep -v '^BUG in find_stowed_path' || true; } | while read -r line; do
+    resolve_tag_dir "$DOTFILES_DIR/$pkg" "$DEVICE_TAG"
+
+    if [[ -n "$STOW_TAG_DIR" ]]; then
+        backup_conflicts "$DOTFILES_DIR/$pkg/$STOW_TAG_DIR" "$HOME"
+        stow -d "$DOTFILES_DIR/$pkg" -R -t "$HOME" "$STOW_TAG_DIR" 2>&1 | { grep -v '^BUG in find_stowed_path' || true; } | while read -r line; do
             info "  $line"
         done
+        STOWED_PACKAGES+=("$pkg")
+        ok_changed "$pkg config deployed ($STOW_TAG_DIR)"
+    else
+        info "  Skipping $pkg (no tag-$DEVICE_TAG or tag-default variant)"
+    fi
+done
+ok_changed "Packages deployed: ${STOWED_PACKAGES[*]}"
+
+# Deploy custom packages (from sibling directory, tag-aware)
+if ((${#CUSTOM_PACKAGES[@]} > 0)); then
+    info "Deploying custom packages (from $CUSTOM_DIR)"
+    for i in "${!CUSTOM_PACKAGES[@]}"; do
+        local cpkg="${CUSTOM_PACKAGES[$i]}"
+        local ctag="${CUSTOM_PKG_TAGS[$i]}"
+        if [[ ! -d "$CUSTOM_DIR/$cpkg/tag-$ctag" ]]; then
+            warn "Custom package '$cpkg' tag-$ctag directory missing in $CUSTOM_DIR, skipping"
+            continue
+        fi
+        backup_conflicts "$CUSTOM_DIR/$cpkg/tag-$ctag" "$HOME"
+        stow -d "$CUSTOM_DIR/$cpkg" -R -t "$HOME" "tag-$ctag" 2>&1 | { grep -v '^BUG in find_stowed_path' || true; } | while read -r line; do
+            info "  $line"
+        done
+        ok_changed "$cpkg custom config deployed (tag-$ctag)"
     done
     ok_changed "Custom packages deployed: ${CUSTOM_PACKAGES[*]}"
 fi
 
-# ─── Phase 5: Deploy device-specific packages ────────────────────────────────
+# ─── Phase 5: Ensure tmux submodule is on master ─────────────────────────────
 
-info "Phase 5: Deploy device-specific packages ($DOTFILES_DEVICE)"
-if [[ "$DOTFILES_DEVICE" == "none" ]]; then
-    info "  Skipping device-specific packages (device type is none)"
-else
-    for pkg in "${DEVICE_PACKAGES[@]}"; do
-        if [[ -d "$DOTFILES_DIR/$pkg/$DOTFILES_DEVICE" ]]; then
-            backup_conflicts "$DOTFILES_DIR/$pkg/$DOTFILES_DEVICE" "$HOME"
-            stow -d "$DOTFILES_DIR/$pkg" -R -t "$HOME" "$DOTFILES_DEVICE" 2>&1 | { grep -v '^BUG in find_stowed_path' || true; } | while read -r line; do
-                info "  $line"
-            done
-            ok_changed "$pkg config deployed ($DOTFILES_DEVICE)"
-        else
-            warn "$pkg config directory not found: $pkg/$DOTFILES_DEVICE"
-        fi
-    done
-fi
-
-# ─── Phase 6: Ensure tmux submodule is on master ─────────────────────────────
-
-info "Phase 6: Tmux submodule"
-if [[ -e "$DOTFILES_DIR/tmux/.tmux/.git" ]]; then
-    cd "$DOTFILES_DIR/tmux/.tmux"
+info "Phase 5: Tmux submodule"
+if [[ -e "$DOTFILES_DIR/tmux/tag-default/.tmux/.git" ]]; then
+    cd "$DOTFILES_DIR/tmux/tag-default/.tmux"
     CURRENT_BRANCH="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
     if [[ "$CURRENT_BRANCH" != "master" ]]; then
         git checkout master
@@ -529,14 +552,14 @@ if [[ -e "$DOTFILES_DIR/tmux/.tmux/.git" ]]; then
         ok "tmux submodule already on master"
     fi
 else
-    warn "tmux submodule not found at tmux/.tmux"
+    warn "tmux submodule not found at tmux/tag-default/.tmux"
 fi
 
-# ─── Phase 7: Ensure nvim submodule is on custom_config ──────────────────────
+# ─── Phase 6: Ensure nvim submodule is on custom_config ──────────────────────
 
-info "Phase 7: Neovim submodule"
-if [[ -e "$DOTFILES_DIR/nvim/.config/nvim/.git" ]]; then
-    cd "$DOTFILES_DIR/nvim/.config/nvim"
+info "Phase 6: Neovim submodule"
+if [[ -e "$DOTFILES_DIR/nvim/tag-default/.config/nvim/.git" ]]; then
+    cd "$DOTFILES_DIR/nvim/tag-default/.config/nvim"
     CURRENT_BRANCH="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
     if [[ "$CURRENT_BRANCH" != "custom_config" ]]; then
         git checkout custom_config
@@ -545,15 +568,19 @@ if [[ -e "$DOTFILES_DIR/nvim/.config/nvim/.git" ]]; then
         ok "nvim submodule already on custom_config"
     fi
 else
-    warn "nvim submodule not found at nvim/.config/nvim"
+    warn "nvim submodule not found at nvim/tag-default/.config/nvim"
 fi
 
-# ─── Phase 8: Verify ─────────────────────────────────────────────────────────
+# ─── Phase 7: Verify ─────────────────────────────────────────────────────────
 
-info "Phase 8: Verification"
+info "Phase 7: Verification"
 VERIFY_FILES=("$HOME/.zshrc" "$HOME/.gitconfig" "$HOME/.config/nvim/init.lua" "$HOME/.claude/settings.json")
-if [[ "$DOTFILES_DEVICE" == "laptop" || "$DOTFILES_DEVICE" == "desktop" ]]; then
-    VERIFY_FILES+=("$HOME/.ssh/config" "$HOME/.p10k.zsh")
+# Add device-tag-specific files if they were stowed
+if in_array "ssh" "${STOWED_PACKAGES[@]}"; then
+    VERIFY_FILES+=("$HOME/.ssh/config")
+fi
+if in_array "p10k" "${STOWED_PACKAGES[@]}"; then
+    VERIFY_FILES+=("$HOME/.p10k.zsh")
 fi
 for f in "${VERIFY_FILES[@]}"; do
     if [[ -L "$f" || -f "$f" ]]; then
@@ -566,6 +593,6 @@ done
 printf '\n'
 info "============================================"
 info "  dotfiles deployment complete!"
-info "  Device: $DOTFILES_DEVICE"
+info "  Device tag: $DEVICE_TAG"
 info "============================================"
 printf '\n'

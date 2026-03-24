@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#MISE description="Install Ghostty terminal (laptop only, deb/appimage/source/snap)"
+#MISE description="Install Ghostty terminal (graphical environment, deb/appimage/source/snap)"
 #MISE depends=["install:runtimes"]
 #MISE raw=true
 set -eo pipefail
@@ -11,53 +11,85 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../lib/helpers.sh"
 
 DOTFILES_DIR="${DOTFILES_DIR:-$HOME/.dotfiles}"
 
-# ─── Phase 1: Device type check ───────────────────────────────────────────────
+# ─── Phase 1: Graphical environment check ────────────────────────────────────
 
-info "Phase 1: Detect device type"
-DEVICE_TYPE_FILE="$DOTFILES_DIR/.device-type"
+info "Phase 1: Detect graphical environment"
+GRAPHICAL_ENV_FILE="$DOTFILES_DIR/.graphical-env"
+HAS_GRAPHICAL=false
 
-if [[ -n "${DOTFILES_DEVICE:-}" ]]; then
-    DEVICE_TYPE="$DOTFILES_DEVICE"
-    info "Using DOTFILES_DEVICE from environment: $DEVICE_TYPE"
-elif [[ -f "$DEVICE_TYPE_FILE" ]]; then
-    DEVICE_TYPE="$(<"$DEVICE_TYPE_FILE")"
-    info "Using persisted device type: $DEVICE_TYPE"
-else
-    if ls /sys/class/power_supply/BAT* &>/dev/null 2>&1; then
-        DEVICE_TYPE="laptop"
-    else
-        DEVICE_TYPE="desktop"
-    fi
-    info "Auto-detected device type: $DEVICE_TYPE"
-    printf 'Device type is "%s". Change? [l]aptop / [d]esktop / [n]one / Enter to keep: ' "$DEVICE_TYPE"
-    read -r CHANGE_DEVICE
-    case "${CHANGE_DEVICE,,}" in
-    l | laptop)
-        DEVICE_TYPE="laptop"
-        info "Switched to: laptop"
+# 1. Check .graphical-env pin file (user override)
+if [[ -f "$GRAPHICAL_ENV_FILE" ]]; then
+    GRAPHICAL_PIN="$(<"$GRAPHICAL_ENV_FILE")"
+    case "${GRAPHICAL_PIN,,}" in
+    graphical | yes)
+        HAS_GRAPHICAL=true
+        info "Graphical environment forced via .graphical-env"
         ;;
-    d | desktop)
-        DEVICE_TYPE="desktop"
-        info "Switched to: desktop"
+    server | none | no)
+        info "Graphical environment disabled via .graphical-env. Skipping Ghostty install."
+        exit 0
         ;;
-    n | none)
-        DEVICE_TYPE="none"
-        info "Switched to: none (device-specific configs will be skipped)"
+    *)
+        warn "Unknown .graphical-env value '$GRAPHICAL_PIN', falling through to auto-detection"
         ;;
-    "") ;; # keep current
-    *) warn "Unrecognized input '$CHANGE_DEVICE', keeping: $DEVICE_TYPE" ;;
     esac
 fi
 
-ok "Device type: $DEVICE_TYPE"
-
-# Persist device type for future runs
-printf '%s' "$DEVICE_TYPE" >"$DEVICE_TYPE_FILE"
-
-if [[ "$DEVICE_TYPE" != "laptop" ]]; then
-    warn "Ghostty install is only supported on laptop devices (current: $DEVICE_TYPE). Skipping."
-    exit 0
+# 2. Auto-detect graphical environment
+if [[ "$HAS_GRAPHICAL" == false ]]; then
+    if [[ -n "${DISPLAY:-}" ]]; then
+        HAS_GRAPHICAL=true
+        info "Graphical environment detected via \$DISPLAY"
+    elif [[ -n "${WAYLAND_DISPLAY:-}" ]]; then
+        HAS_GRAPHICAL=true
+        info "Graphical environment detected via \$WAYLAND_DISPLAY"
+    elif [[ "${XDG_SESSION_TYPE:-}" == "x11" || "${XDG_SESSION_TYPE:-}" == "wayland" ]]; then
+        HAS_GRAPHICAL=true
+        info "Graphical environment detected via \$XDG_SESSION_TYPE ($XDG_SESSION_TYPE)"
+    else
+        # 3. Fallback: loginctl
+        SESSION_TYPE=""
+        if command -v loginctl &>/dev/null; then
+            SESSION_ID="$(loginctl 2>/dev/null | grep "$(whoami)" | awk '{print $1}' | head -1)"
+            if [[ -n "$SESSION_ID" ]]; then
+                SESSION_TYPE="$(loginctl show-session "$SESSION_ID" -p Type --value 2>/dev/null || true)"
+            fi
+        fi
+        if [[ "$SESSION_TYPE" == "x11" || "$SESSION_TYPE" == "wayland" ]]; then
+            HAS_GRAPHICAL=true
+            info "Graphical environment detected via loginctl ($SESSION_TYPE)"
+        fi
+    fi
 fi
+
+# 4. If nothing detected, prompt user
+if [[ "$HAS_GRAPHICAL" == false ]]; then
+    warn "No graphical environment detected."
+    printf 'Install Ghostty anyway? (y/N): '
+    read -r FORCE_INSTALL
+    if [[ ! "${FORCE_INSTALL,,}" =~ ^y ]]; then
+        info "Skipping Ghostty install."
+        exit 0
+    fi
+    HAS_GRAPHICAL=true
+
+    # Offer to persist the decision
+    printf 'Persist this choice? [g]raphical / [s]erver / Enter to skip: '
+    read -r PERSIST_CHOICE
+    case "${PERSIST_CHOICE,,}" in
+    g | graphical)
+        printf 'graphical' >"$GRAPHICAL_ENV_FILE"
+        info "Saved .graphical-env = graphical"
+        ;;
+    s | server)
+        printf 'server' >"$GRAPHICAL_ENV_FILE"
+        info "Saved .graphical-env = server (Ghostty will be skipped in future runs)"
+        exit 0
+        ;;
+    esac
+fi
+
+ok "Graphical environment confirmed"
 
 # ─── Phase 2: Fetch latest version ────────────────────────────────────────────
 

@@ -25,18 +25,18 @@ rust --version             # Should use mise-managed version
 
 ## Neovim
 
-**Config location:** `nvim/.config/nvim/` (git submodule)
+**Config location:** `nvim/tag-default/.config/nvim/` (git submodule)
 
 **Runtime:** Neovim stable binary managed via `mise install` (defined in `.mise.toml`)
 
 **Deployment:**
 ```bash
-stow -t ~ nvim   # Links ~/.config/nvim → dotfiles/nvim/.config/nvim
+stow -d nvim -t ~ tag-default   # Links ~/.config/nvim → dotfiles/nvim/tag-default/.config/nvim
 ```
 
 **Submodule update:**
 ```bash
-git submodule update --remote nvim/.config/nvim
+git submodule update --remote nvim/tag-default/.config/nvim
 ```
 
 ---
@@ -49,7 +49,7 @@ git submodule update --remote nvim/.config/nvim
 
 **Deployment:**
 ```bash
-stow -t ~ gh
+stow -d gh -t ~ tag-default
 ```
 
 ---
@@ -62,7 +62,7 @@ stow -t ~ gh
 
 **Deployment:**
 ```bash
-stow -t ~ gh-dash
+stow -d gh-dash -t ~ tag-default
 ```
 
 ---
@@ -198,10 +198,10 @@ stow -t ~ gh-dash
 
 ### SSH Keys
 
-**Config location:** `ssh/laptop/config` or `ssh/desktop/config`
+**Config location:** `ssh/tag-laptop/.ssh/config` or `ssh/tag-desktop/.ssh/config`
 
 **Device-specific paths:**
 - Laptop: May use hardware security tokens or lighter-weight keys
-- Desktop: Can afford more complex multi-key setups
+- Default: Can afford more complex multi-key setups
 
-**Setup:** Device type auto-detected and persisted by `mise run setup:dotfiles` (see `.device-type`)
+**Setup:** Device tag resolved and persisted by `mise run setup:dotfiles` (see `.device-tag`)

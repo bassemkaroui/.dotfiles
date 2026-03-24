@@ -8,7 +8,7 @@ set -eo pipefail
 # ─── Helpers ───────────────────────────────────────────────────────────────────
 
 TASK_NAME="init"
-source "$HOME/.dotfiles/mise/.config/mise/tasks/lib/helpers.sh"
+source "$HOME/.dotfiles/mise/tag-default/.config/mise/tasks/lib/helpers.sh"
 
 # ─── Step 1: Ensure stow is available ─────────────────────────────────────────
 
@@ -127,17 +127,17 @@ info "Step 2: Deploy mise config via stow"
 cd ~/.dotfiles
 mkdir -p ~/.config
 
-stow_output="$(stow -nv -t ~ mise 2>&1)" || true
+stow_output="$(stow -nv -d "$HOME/.dotfiles/mise" -t ~ tag-default 2>&1)" || true
 
 if echo "$stow_output" | grep -q "LINK:"; then
     # Fresh deploy — no conflicts, just needs linking
-    backup_mise_conflicts "$HOME/.dotfiles/mise" "$HOME"
-    stow -R -t ~ mise
+    backup_mise_conflicts "$HOME/.dotfiles/mise/tag-default" "$HOME"
+    stow -d "$HOME/.dotfiles/mise" -R -t ~ tag-default
     ok_changed "mise config deployed to ~/.config/mise/"
 elif echo "$stow_output" | grep -qi "conflict"; then
     # Real files exist that block stow — back up and force deploy
-    backup_mise_conflicts "$HOME/.dotfiles/mise" "$HOME"
-    stow -R -t ~ mise
+    backup_mise_conflicts "$HOME/.dotfiles/mise/tag-default" "$HOME"
+    stow -d "$HOME/.dotfiles/mise" -R -t ~ tag-default
     ok_changed "mise config deployed to ~/.config/mise/ (conflicts resolved via backup)"
 else
     ok "mise config already deployed"

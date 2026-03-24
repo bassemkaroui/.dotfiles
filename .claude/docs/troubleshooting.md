@@ -25,7 +25,7 @@ ls -la ~/.zshrc           # Check if symlink or regular file
 rm ~/.zshrc              # Or backup first: mv ~/.zshrc ~/.zshrc.bak
 
 # Retry stow
-stow -t ~ zsh
+stow -d zsh -t ~ tag-default
 ```
 
 ### Stow Symlinks Broken After Update
@@ -37,11 +37,12 @@ stow -t ~ zsh
 **Manual resolution** (for individual packages):
 ```bash
 # Restow affected packages (removes old symlinks, creates new ones)
-stow -R -t ~ zsh bash
+stow -d zsh -R -t ~ tag-default
+stow -d bash -R -t ~ tag-default
 
 # Or the equivalent two-step if you need more control
-stow -D -t ~ zsh bash    # Delete
-stow -t ~ zsh bash        # Reinstall
+stow -D -d zsh -t ~ tag-default    # Delete
+stow -d zsh -t ~ tag-default        # Reinstall
 ```
 
 ### Selective Unstow
@@ -49,7 +50,7 @@ stow -t ~ zsh bash        # Reinstall
 **To remove only one device variant:**
 ```bash
 # Remove laptop variant while keeping shared configs
-stow -D -t ~ -S laptop   # From p10k/ or ssh/
+stow -D -d ssh -t ~ tag-laptop    # From ssh/ (or any multi-variant package)
 ```
 
 ---
@@ -115,18 +116,18 @@ mise run install:nala
 mise run install:runtimes  # May need passwordless sudo
 ```
 
-### Wrong Device Type Detected or Persisted
+### Wrong Device Tag Persisted
 
-**Cause:** Auto-detection picked the wrong type, or `.device-type` was persisted from a previous run on different hardware.
+**Cause:** `.device-tag` was persisted from a previous run with a different tag.
 
 **Resolution:**
 ```bash
-# Delete persisted device type and re-run
-rm ~/.dotfiles/.device-type
+# Delete persisted device tag and re-run
+rm ~/.dotfiles/.device-tag
 mise run setup:dotfiles
 
 # Or override via environment variable
-DOTFILES_DEVICE=laptop mise run setup:dotfiles
+DOTFILES_TAG=laptop mise run setup:dotfiles
 ```
 
 ### Runtimes Not Found After `mise run install:runtimes`
@@ -175,7 +176,7 @@ source ~/.zshrc
 **Common causes:**
 1. Missing Nerd Font (displays fallback characters)
 2. P10k cache stale or incompatible with new version
-3. Device variant not applied (using shared config instead of laptop/desktop)
+3. Device variant not applied (wrong tag-based variant stowed)
 
 **Resolution:**
 ```bash
@@ -232,8 +233,8 @@ delta --version
 
 **Reset git config from dotfiles:**
 ```bash
-stow -D -t ~ git     # Unlink
-stow -t ~ git        # Relink (redeploy config)
+stow -D -d git -t ~ tag-default     # Unlink
+stow -d git -t ~ tag-default        # Relink (redeploy config)
 ```
 
 ### SSH Keys Not Found
@@ -248,7 +249,7 @@ ssh-agent                 # Running?
 **Device-specific SSH config:**
 ```bash
 cat ~/.ssh/config         # Check symlink target
-# Should point to laptop/ or desktop/ variant
+# Should point to tag-laptop/ or tag-desktop/ variant
 ```
 
 ---

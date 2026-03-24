@@ -1,7 +1,7 @@
 [submodule "tmux/.tmux"]
-	path = tmux/.tmux
+	path = tmux/tag-default/.tmux
 	url = https://github.com/gpakosz/.tmux
 [submodule "nvim/.config/nvim"]
-	path = nvim/.config/nvim
+	path = nvim/tag-default/.config/nvim
 	url = https://github.com/bassemkaroui/kickstart.nvim.git
 	branch = custom_config

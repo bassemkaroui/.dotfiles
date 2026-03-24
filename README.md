@@ -53,21 +53,23 @@ mise run setup:dotfiles
 
 ```bash
 cd ~/.dotfiles
-stow -t ~ bash fzf git gnome_themes gpg zsh tmux bat yazi mise nvim gh gh-dash claude
+# Each package uses tag-default/ (or tag-<variant>/) subdirectories
+stow -d bash -t ~ tag-default
+stow -d git -t ~ tag-default
+# ... etc. for each package
 ```
 
-### Device-specific configs (ssh, p10k)
+### Device-specific configs (ssh)
 
 ```bash
-cd ~/.dotfiles/ssh && stow -t ~ laptop   # or desktop
-cd ~/.dotfiles/p10k && stow -t ~ laptop  # or desktop
+stow -d ssh -t ~ tag-laptop    # or tag-desktop
 ```
 
 ### Dry-run / Unstow
 
 ```bash
-stow -nv -t ~ bash   # dry-run
-stow -D -t ~ zsh     # unstow
+stow -nv -d bash -t ~ tag-default   # dry-run
+stow -D -d zsh -t ~ tag-default     # unstow
 ```
 
 ## Stow Packages
@@ -103,7 +105,7 @@ stow -D -t ~ zsh     # unstow
 | `install:veracrypt`    | Install latest VeraCrypt                                                                  |
 | `setup:zsh`            | Full zsh environment setup                                                                |
 | `setup:custom-dotfiles`| Manage custom config packages (add/remove your own configs)                               |
-| `setup:dotfiles`       | Deploy dotfiles via stow (auto-detects device type)                                       |
+| `setup:dotfiles`       | Deploy dotfiles via stow (resolves device tag)                                            |
 | `setup:shell-tools`    | Configure shell integrations                                                              |
 | `setup:p10k-configure` | Run p10k configuration wizard                                                             |
 | `setup:zsh-config`     | Configure `.zshrc` with mise integration, plugins, and theme (run after `setup:dotfiles`) |

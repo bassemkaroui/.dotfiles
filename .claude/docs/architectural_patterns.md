@@ -2,12 +2,12 @@
 
 ## Stow-Based Modular Organization
 
-**Pattern:** Each tool/config category is a Stow "package" that independently mirrors the home directory structure.
+**Pattern:** Each tool/config category is a Stow "package" with `tag-*` subdirectories that mirror the home directory structure.
 
 **Implementation:**
-- Package: `zsh/.zshrc` → Deployed as `~/.zshrc`
-- Package: `bat/.config/bat/config` → Deployed as `~/.config/bat/config`
-- Selective deployment: `stow -t ~ bash zsh` deploys only Bash and Zsh configs; others remain unchanged
+- Package: `zsh/tag-default/.zshrc` → Deployed as `~/.zshrc`
+- Package: `bat/tag-default/.config/bat/themes/...` → Deployed as `~/.config/bat/themes/...`
+- Selective deployment: `stow -d bash -t ~ tag-default` deploys only a single package
 
 **Benefits:**
 - No file duplication across packages
@@ -59,71 +59,106 @@
 
 ---
 
-## Device-Specific Configurations
+## Tag-Based Device Configurations
 
-**Pattern:** Hardware/device variants (laptop vs. desktop) co-exist in the same Stow package and are selected during setup. The detected device type is persisted for future runs.
+**Pattern:** All packages use `tag-*` subdirectories for their config files. The device tag (persisted in `.device-tag`) selects which variant to deploy, with `tag-default/` as the universal fallback.
 
 **Implementation:**
 ```
-p10k/
-├── laptop/
-│   └── .p10k.zsh       # Minimal prompt (resource-constrained)
-├── desktop/
-│   └── .p10k.zsh       # Full-featured prompt
-└── (shared p10k config if any)
+bash/                     # Single-variant package
+└── tag-default/
+    └── .bashrc
+
+ssh/                      # Multi-variant package (no default fallback)
+├── tag-desktop/
+│   └── .ssh/config      # Desktop SSH config
+└── tag-laptop/
+    └── .ssh/config      # Laptop SSH config
 ```
 
-**Device-specific packages** are defined as a data-driven array in `setup:dotfiles`:
-```bash
-DEVICE_PACKAGES=(ssh p10k)
-```
-To add a new device-variant package, create `<package>/laptop/` and `<package>/desktop/` subdirectories, then append the package name to this array.
+To add a new tagged variant, create `<package>/tag-<tag>/` subdirectories with the appropriate config files. Most packages only need `tag-default/`.
 
-**Selection logic (priority order):**
-1. `DOTFILES_DEVICE` environment variable (explicit override)
-2. `.device-type` file in repo root (persisted from previous run)
-3. Auto-detection via `/sys/class/power_supply/BAT*` (battery = laptop, otherwise desktop)
-4. Interactive prompt to confirm or change
+**Tag resolution logic:**
+1. `DOTFILES_TAG` environment variable (explicit override)
+2. `.device-tag` file in repo root (persisted from previous run)
+3. Interactive prompt (default: "default")
 
-After detection, the result is persisted to `.dotfiles/.device-type` (git-ignored) so subsequent runs skip detection entirely.
+**Package resolution (per tagged package):**
+1. If `<package>/tag-$DEVICE_TAG/` exists → stow that
+2. Else if `<package>/tag-default/` exists → fallback to that
+3. Else → skip (package not deployed on this machine)
+
+After resolution, the tag is persisted to `.dotfiles/.device-tag` (git-ignored) so subsequent runs skip the prompt. Tags must match `[a-zA-Z0-9_-]+`.
 
 **Same pattern in:**
-- `ssh/laptop/` vs. `ssh/desktop/` — Different SSH key paths/configs per device
-- Mise config allows hardware-specific tool choices (e.g., ARM vs. x86)
+- `ssh/tag-desktop/` vs. `ssh/tag-laptop/` — Different SSH key paths/configs per device
 
 **Benefits:**
 - Single repo for all machines
-- No branch switching or manual selection
+- Free-form tags (not limited to laptop/desktop) — use "work", "personal", "server", etc.
+- `tag-default` provides a universal fallback
 - Config changes sync across devices but preserve device-specific overrides
-- Persisted device type eliminates repeated prompts on re-runs
+- Persisted tag eliminates repeated prompts on re-runs
 
-**When applying:** Use for configs that vary by hardware, OS, or environment (SSH keys, display settings, resource limits).
+**When applying:** Use for configs that vary by machine role, environment, or hardware. Create `tag-*` subdirectories in any package.
+
+---
+
+## Graphical Environment Detection
+
+**Pattern:** GUI tool installation (e.g., Ghostty) checks for a graphical environment rather than relying on device type. This is separate from the tag system.
+
+**Detection checks (in order):**
+1. `.graphical-env` pin file — `graphical` forces yes, `server`/`none` forces skip
+2. `$DISPLAY` or `$WAYLAND_DISPLAY` environment variables
+3. `$XDG_SESSION_TYPE` (`x11` or `wayland`)
+4. `loginctl show-session` Type property
+
+**When applying:** Use for any tool that only makes sense in a graphical environment. Always confirm with the user before installing.
 
 ---
 
 ## Custom Packages Extension
 
-**Pattern:** Users can add their own config packages in a sibling directory (`~/.dotfiles-custom/`), tracked via an INI-style `.custom-packages` file. Custom packages integrate with the existing stow deployment pipeline but live entirely outside the main dotfiles repo.
+**Pattern:** Users can add their own config packages in a sibling directory (`~/.dotfiles-custom/`), tracked via an INI-style `.custom-packages` file with `[name:tag]` composite section headers. Custom packages are tag-aware and integrate with the existing stow deployment pipeline but live entirely outside the main dotfiles repo.
 
 **Implementation:**
 - `setup:custom-dotfiles` task manages the lifecycle (add/remove/verify)
 - Custom packages live in `~/.dotfiles-custom/` (override via `DOTFILES_CUSTOM_DIR` env var)
-- `.custom-packages` (INI format) inside the sibling dir tracks package name, source path, type (full/partial), and recurse_dirs
+- `.custom-packages` (INI format) inside the sibling dir uses `[name:tag]` sections (bare `[name]` = `tag=default`)
+- Each entry tracks: source path, type (full/partial), and recurse_dirs
 - The sibling directory can optionally be its own git repo (auto-commits are conditional on `.git` existing)
-- `setup:dotfiles` loads `.custom-packages` at startup, extending `CUSTOM_PACKAGES` and `RECURSE_DIRS` arrays
-- Deployment uses `stow -d ~/.dotfiles-custom` to stow from the sibling directory
+- `setup:dotfiles` loads `.custom-packages` at startup, extending `CUSTOM_PACKAGES`, `CUSTOM_PKG_TAGS`, and `RECURSE_DIRS` arrays
+- Deployment uses `stow -d ~/.dotfiles-custom/<pkg> -t ~ tag-<tag>` to stow tagged variants
+
+**Directory layout:**
+```
+~/.dotfiles-custom/
+  alacritty/
+    tag-work/
+      .config/alacritty/alacritty.toml
+    tag-personal/
+      .config/alacritty/alacritty.toml
+```
 
 **Add workflow:**
 1. Ensure sibling directory exists (create + optional `git init` if needed)
-2. Copy config into stow package layout (`<name>/<home-relative-path>/`)
-3. For partial directories: only selected items are copied; parent dir added to `RECURSE_DIRS`
-4. Update `.custom-packages`, auto-commit (if git repo)
-5. Stowing and backup handled by `setup:dotfiles` on next run
+2. Read current `.device-tag` to determine the tag for this variant
+3. If `(package, tag)` already exists → warn and bail
+4. Copy config into tagged stow layout (`<name>/tag-<tag>/<home-relative-path>/`)
+5. For partial directories: only selected items are copied; parent dir added to `RECURSE_DIRS`
+6. Update `.custom-packages` with `[name:tag]` entry, auto-commit (if git repo)
+7. Stowing and backup handled by `setup:dotfiles` on next run
 
 **Remove workflow:**
-1. Unstow via `stow -D`, restore `.bak` backups
-2. Delete package directory from sibling dir
-3. Update `.custom-packages`, auto-commit (if git repo)
+1. Unstow tagged variant via `stow -D`, restore `.bak` backups
+2. Remove `tag-<tag>/` directory from the package
+3. If no tagged variants remain → remove entire package directory
+4. Update `.custom-packages`, auto-commit (if git repo)
+
+**Tag resolution during deployment:**
+- Same logic as main packages: exact tag match → `tag-default` fallback → skip
+- If multiple entries exist for the same package, the exact tag match takes priority over default
 
 **Integration with stow-exclude:**
 - Custom packages are **excluded** from `.stow-exclude` proposals (never offered for exclusion)
@@ -132,7 +167,7 @@ After detection, the result is persisted to `.dotfiles/.device-type` (git-ignore
 **Benefits over branch-based approach:**
 - Custom packages always present regardless of git state on main repo
 - No branch-switching mental overhead
-- Each machine has its own independent custom directory
+- Each machine has its own independent custom directory with its own tagged variants
 - Main repo stays pristine for upstream updates
 
 **When applying:** Use `setup:custom-dotfiles` to manage any config not covered by default packages. See [CUSTOM-PACKAGES.md](../../CUSTOM-PACKAGES.md) for user-facing docs.
@@ -144,8 +179,8 @@ After detection, the result is persisted to `.dotfiles/.device-type` (git-ignore
 **Pattern:** The Mise tool itself is configured via a Stow package (`mise/`), enabling version control of the task automation system.
 
 **Implementation:**
-- `mise/.config/mise/config.toml` → Stowed as `~/.config/mise/config.toml` (Mise's own config)
-- `mise/.config/mise/tasks/` → Stowed as `~/.config/mise/tasks/` (Task definitions)
+- `mise/tag-default/.config/mise/config.toml` → Stowed as `~/.config/mise/config.toml` (Mise's own config)
+- `mise/tag-default/.config/mise/tasks/` → Stowed as `~/.config/mise/tasks/` (Task definitions)
 
 **Benefit:** Mise configuration is version-controlled alongside other dotfiles; updates to Mise tasks propagate via normal git workflow.
 
@@ -159,9 +194,9 @@ After detection, the result is persisted to `.dotfiles/.device-type` (git-ignore
 
 **Implementation:**
 ```
-bat/.config/bat/config → ~/.config/bat/config
-yazi/.config/yazi/yazi.toml → ~/.config/yazi/yazi.toml
-tmux/.config/tmux/tmux.conf → ~/.config/tmux/tmux.conf
+bat/tag-default/.config/bat/themes/... → ~/.config/bat/themes/...
+yazi/tag-default/.config/yazi/yazi.toml → ~/.config/yazi/yazi.toml
+tmux/tag-default/.config/tmux/tmux.conf → ~/.config/tmux/tmux.conf
 ```
 
 **Benefits:**
@@ -179,9 +214,9 @@ tmux/.config/tmux/tmux.conf → ~/.config/tmux/tmux.conf
 **Pattern:** External projects (e.g., oh-my-tmux) are integrated as git submodules, ensuring version pinning and easy updates.
 
 **Current usage:**
-- `tmux/.tmux` → Submodule pointing to [oh-my-tmux](https://github.com/gpakosz/.tmux)
-- Deployed as `~/.config/tmux/` after stowing
-- `nvim/.config/nvim` → Submodule pointing to personal Neovim config
+- `tmux/tag-default/.tmux` → Submodule pointing to [oh-my-tmux](https://github.com/gpakosz/.tmux)
+- Deployed as `~/.tmux` after stowing
+- `nvim/tag-default/.config/nvim` → Submodule pointing to personal Neovim config
 - Deployed as `~/.config/nvim/` after stowing
 
 **Update flow:**
