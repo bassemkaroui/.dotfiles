@@ -67,6 +67,7 @@ stow -t ~ -S laptop                       # Device-specific (from p10k/, ssh/)
 
 - **Modular via Stow:** Each tool in its own package; deploy selectively
 - **Device-aware:** Laptop/desktop variants in `p10k/` and `ssh/`; auto-detected and persisted to `.device-type`
+- **Per-machine exclusions:** `.stow-exclude` (gitignored) lists packages to skip on a specific machine; managed interactively by `setup:dotfiles`
 - **XDG compliance:** Configs use `~/.config/` for tool-specific settings
 - **Task-driven:** All setup automation flows through Mise
 - **Nested Stow:** Mise config itself is stowed, enabling config management of the manager
@@ -79,9 +80,11 @@ See `.claude/docs/architectural_patterns.md` for detailed pattern documentation.
 - [Tools Setup](.claude/docs/tools_setup.md) — Runtime installation, CLI integrations
 - [Troubleshooting](.claude/docs/troubleshooting.md) — Common stow conflicts, missing dependencies
 
-## Documentation Maintenance
+## Working with Claude
 
-After completing any code change, reflect on whether the change affects:
+**Before starting any non-trivial task**, create a task list with `TaskCreate` to track the steps. Mark each task `in_progress` when you begin it and `completed` when done.
+
+**Always include a final task in the list:** "Update docs if needed" — this must be the last task before closing out. When you reach it, reflect on whether the changes affect any of:
 - `CLAUDE.md` (project overview, patterns, commands)
 - `.claude/docs/architectural_patterns.md` (design patterns)
 - `.claude/docs/tools_setup.md` (tool configs, integrations)

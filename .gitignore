@@ -2,6 +2,7 @@
 *.backup
 *.backup1
 .device-type
+.stow-exclude
 zsh/.config/completions/_*
 gpg/.gnupg/*
 !gpg/.gnupg/gpg-agent.conf

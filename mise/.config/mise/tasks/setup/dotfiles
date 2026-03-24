@@ -191,10 +191,212 @@ ok "Device type: $DOTFILES_DEVICE"
 # Persist device type for future runs
 printf '%s' "$DOTFILES_DEVICE" >"$DEVICE_TYPE_FILE"
 
+# ─── Phase 3.5: Manage stow exclusions ──────────────────────────────────────
+
+STOW_EXCLUDE_FILE="$DOTFILES_DIR/.stow-exclude"
+ALL_COMMON_PACKAGES=(bash fzf git gnome_themes gpg zsh tmux bat yazi mise nvim gh gh-dash claude ghostty)
+ALL_DEVICE_PACKAGES=(ssh p10k)
+
+info "Phase 3.5: Stow exclusions"
+
+# Create .stow-exclude with header if missing
+if [[ ! -f "$STOW_EXCLUDE_FILE" ]]; then
+    cat > "$STOW_EXCLUDE_FILE" <<'HEADER'
+# Stow package exclusion list (per-machine, gitignored)
+# Add one package name per line to skip it during setup:dotfiles
+# Available packages: bash fzf git gnome_themes gpg zsh tmux bat yazi mise nvim gh gh-dash claude ghostty
+# Device packages: ssh p10k
+HEADER
+    info "Created $STOW_EXCLUDE_FILE — edit to skip packages on this machine"
+fi
+
+# Read current exclusions from file (strip comments and blank lines)
+read_exclusions() {
+    EXCLUDED=()
+    while IFS= read -r line; do
+        line="${line%%#*}"          # strip inline comments
+        line="${line// /}"          # strip spaces
+        [[ -z "$line" ]] && continue
+        EXCLUDED+=("$line")
+    done < "$STOW_EXCLUDE_FILE"
+}
+
+# Write exclusions back to file (preserves header comments)
+write_exclusions() {
+    # Keep only comment/blank lines from original, then append exclusions
+    local tmpfile
+    tmpfile="$(mktemp)"
+    grep -E '^\s*(#|$)' "$STOW_EXCLUDE_FILE" > "$tmpfile" || true
+    for pkg in "${EXCLUDED[@]}"; do
+        printf '%s\n' "$pkg" >> "$tmpfile"
+    done
+    mv "$tmpfile" "$STOW_EXCLUDE_FILE"
+}
+
+# Check if a value is in an array
+in_array() {
+    local needle="$1"; shift
+    for item in "$@"; do
+        [[ "$item" == "$needle" ]] && return 0
+    done
+    return 1
+}
+
+# Unstow a package and restore backups if any exist
+unstow_package() {
+    local pkg="$1"
+    local is_device="${2:-false}"
+
+    if [[ "$is_device" == "true" ]]; then
+        if [[ -d "$DOTFILES_DIR/$pkg/$DOTFILES_DEVICE" ]]; then
+            stow -D -d "$DOTFILES_DIR/$pkg" -t "$HOME" "$DOTFILES_DEVICE" 2>/dev/null || true
+            info "  Unstowed device package: $pkg ($DOTFILES_DEVICE)"
+        fi
+    else
+        if [[ -d "$DOTFILES_DIR/$pkg" ]]; then
+            stow -D -d "$DOTFILES_DIR" -t "$HOME" "$pkg" 2>/dev/null || true
+            info "  Unstowed package: $pkg"
+        fi
+    fi
+
+    # Restore backups: find .bak files that belong to this package
+    local pkg_dir
+    if [[ "$is_device" == "true" ]]; then
+        pkg_dir="$DOTFILES_DIR/$pkg/$DOTFILES_DEVICE"
+    else
+        pkg_dir="$DOTFILES_DIR/$pkg"
+    fi
+    [[ -d "$pkg_dir" ]] || return 0
+
+    while IFS= read -r -d '' rel_path; do
+        [[ -z "$rel_path" ]] && continue
+        local target="$HOME/$rel_path"
+        # Find the highest numbered backup
+        local restore_from=""
+        local i=1
+        if [[ -e "$target.bak" ]]; then
+            restore_from="$target.bak"
+        fi
+        while [[ -e "$target.bak.$i" ]]; do
+            restore_from="$target.bak.$i"
+            ((i++))
+        done
+        if [[ -n "$restore_from" ]]; then
+            mv "$restore_from" "$target"
+            info "  Restored: $restore_from -> $target"
+        fi
+    done < <(find "$pkg_dir" -mindepth 1 \( -type f -o -type l \) \
+        -not -path '*/.git/*' -not -name '.git' \
+        -printf '%P\0' 2>/dev/null)
+}
+
+# Interactive exclusion management loop
+while true; do
+    read_exclusions
+
+    if ((${#EXCLUDED[@]} > 0)); then
+        info "Currently excluded: ${EXCLUDED[*]}"
+    else
+        info "No packages currently excluded"
+    fi
+
+    printf 'Modify exclusions? [a]dd / [r]emove / Enter to keep: '
+    read -r MODIFY_CHOICE
+
+    case "${MODIFY_CHOICE,,}" in
+    a | add)
+        # Build list of available (non-excluded) packages
+        AVAILABLE=()
+        for pkg in "${ALL_COMMON_PACKAGES[@]}" "${ALL_DEVICE_PACKAGES[@]}"; do
+            in_array "$pkg" "${EXCLUDED[@]}" || AVAILABLE+=("$pkg")
+        done
+        if ((${#AVAILABLE[@]} == 0)); then
+            warn "All packages are already excluded"
+            continue
+        fi
+        info "Available packages:"
+        for i in "${!AVAILABLE[@]}"; do
+            printf '  %d) %s\n' "$((i + 1))" "${AVAILABLE[$i]}"
+        done
+        printf 'Enter numbers to exclude (space-separated), or Enter to cancel: '
+        read -r ADD_CHOICES
+        [[ -z "$ADD_CHOICES" ]] && continue
+        for choice in $ADD_CHOICES; do
+            if [[ "$choice" =~ ^[0-9]+$ ]] && ((choice >= 1 && choice <= ${#AVAILABLE[@]})); then
+                local_pkg="${AVAILABLE[$((choice - 1))]}"
+                EXCLUDED+=("$local_pkg")
+                info "  Added: $local_pkg"
+            else
+                warn "  Invalid selection: $choice"
+            fi
+        done
+        write_exclusions
+        ;;
+    r | remove)
+        if ((${#EXCLUDED[@]} == 0)); then
+            warn "No packages to remove from exclusions"
+            continue
+        fi
+        info "Currently excluded packages:"
+        for i in "${!EXCLUDED[@]}"; do
+            printf '  %d) %s\n' "$((i + 1))" "${EXCLUDED[$i]}"
+        done
+        printf 'Enter numbers to un-exclude (space-separated), or Enter to cancel: '
+        read -r REMOVE_CHOICES
+        [[ -z "$REMOVE_CHOICES" ]] && continue
+        TO_REMOVE=()
+        for choice in $REMOVE_CHOICES; do
+            if [[ "$choice" =~ ^[0-9]+$ ]] && ((choice >= 1 && choice <= ${#EXCLUDED[@]})); then
+                TO_REMOVE+=("${EXCLUDED[$((choice - 1))]}")
+                info "  Removed: ${EXCLUDED[$((choice - 1))]}"
+            else
+                warn "  Invalid selection: $choice"
+            fi
+        done
+        # Rebuild EXCLUDED without removed items
+        NEW_EXCLUDED=()
+        for pkg in "${EXCLUDED[@]}"; do
+            in_array "$pkg" "${TO_REMOVE[@]}" || NEW_EXCLUDED+=("$pkg")
+        done
+        EXCLUDED=("${NEW_EXCLUDED[@]}")
+        write_exclusions
+        ;;
+    "")
+        break
+        ;;
+    *)
+        warn "Unrecognized input '$MODIFY_CHOICE'"
+        ;;
+    esac
+done
+
+# Unstow any newly-excluded packages that have symlinks in $HOME
+read_exclusions
+for pkg in "${EXCLUDED[@]}"; do
+    if in_array "$pkg" "${ALL_DEVICE_PACKAGES[@]}"; then
+        unstow_package "$pkg" true
+    else
+        unstow_package "$pkg" false
+    fi
+done
+
+if ((${#EXCLUDED[@]} > 0)); then
+    ok "Exclusions applied: ${EXCLUDED[*]}"
+else
+    ok "No exclusions"
+fi
+
 # ─── Precompute shared directories ───────────────────────────────────────────
 
-COMMON_PACKAGES=(bash fzf git gnome_themes gpg zsh tmux bat yazi mise nvim gh gh-dash claude ghostty)
-DEVICE_PACKAGES=(ssh p10k)
+# Filter packages based on exclusions
+COMMON_PACKAGES=()
+for pkg in "${ALL_COMMON_PACKAGES[@]}"; do
+    in_array "$pkg" "${EXCLUDED[@]}" || COMMON_PACKAGES+=("$pkg")
+done
+DEVICE_PACKAGES=()
+for pkg in "${ALL_DEVICE_PACKAGES[@]}"; do
+    in_array "$pkg" "${EXCLUDED[@]}" || DEVICE_PACKAGES+=("$pkg")
+done
 
 ALL_PKG_DIRS=()
 for pkg in "${COMMON_PACKAGES[@]}"; do

@@ -17,6 +17,8 @@
 
 **Conflict handling:** `setup:dotfiles` automatically backs up existing files/directories (`.bak` suffix) before stowing. It distinguishes shared directories (e.g., `~/.config`, `~/.gnupg`) from package-owned directories (e.g., `~/.config/yazi`) — shared dirs are descended into, package-owned dirs are backed up as a whole.
 
+**Per-machine exclusions:** A gitignored `.stow-exclude` file at the repo root lets you skip packages on specific machines. `setup:dotfiles` creates this file automatically on first run and prompts interactively each run to add or remove exclusions. When a package is newly excluded, its symlinks are removed via `stow -D` and any previously-backed-up files are restored. The file format is one package name per line, with `#` comments supported.
+
 **When applying:** Use Stow for any new tool/service config. Follow directory structure that mirrors `~/.` paths.
 
 ---
