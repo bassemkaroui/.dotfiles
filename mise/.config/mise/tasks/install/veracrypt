@@ -4,6 +4,9 @@
 #MISE raw=true
 set -eo pipefail
 
+TASK_NAME="install:veracrypt"
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../lib/helpers.sh"
+
 source /etc/os-release
 
 INSTALLED_VERSION="$(dpkg-query -W -f='${Version}' veracrypt-console 2>/dev/null \
@@ -19,7 +22,7 @@ VERSION="${TAG#VeraCrypt_}"
 INSTALLED_UPSTREAM="${INSTALLED_VERSION%%-*}"   # e.g. "1.26.24-1~ubuntu22.04-1" → "1.26.24"
 
 if [[ "$INSTALLED_UPSTREAM" == "$VERSION" ]]; then
-  echo "VeraCrypt $VERSION already installed."
+  ok "VeraCrypt $VERSION already installed"
   exit 0
 fi
 
@@ -33,33 +36,24 @@ print(matches[0] if matches else '')
 ")"
 
 if [ -z "$ASSET_URL" ]; then
-  echo "No matching asset found: $ASSET_NAME"
-  echo "Available Ubuntu console debs:"
-  echo "$RELEASE_JSON" | python3 -c "
-import json, sys
-for a in json.load(sys.stdin)['assets']:
-  n = a['name']
-  if 'veracrypt-console' in n and 'Ubuntu' in n and n.endswith('.deb') and not n.endswith('.sig'):
-    print(n)
-"
-  exit 1
+  fail "No matching asset found: $ASSET_NAME"
 fi
 
 TMPDIR="$(mktemp -d)"
 chmod 755 "$TMPDIR"
 trap 'rm -rf "$TMPDIR"' EXIT
-echo "Downloading $ASSET_NAME..."
+info "Downloading $ASSET_NAME..."
 curl -fL -o "$TMPDIR/$ASSET_NAME" "$ASSET_URL"
-echo "Installing (requires sudo)..."
+info "Installing (requires sudo)..."
 if ! sudo apt-get install -y -f "$TMPDIR/$ASSET_NAME"; then
-  echo "Warning: Failed to install VeraCrypt. Install manually: $ASSET_URL"
+  warn "Failed to install VeraCrypt. Install manually: $ASSET_URL"
   exit 0
 fi
-echo -e "\033[32mVeraCrypt $VERSION installed successfully.\033[0m"
+ok_changed "VeraCrypt $VERSION installed successfully"
 
 # "veracrypt" (no -console suffix) is the legacy package name; safe to purge without
 # touching the newly installed "veracrypt-console".
 if dpkg-query -W veracrypt &>/dev/null 2>&1; then
-  echo "Removing legacy veracrypt package..."
+  info "Removing legacy veracrypt package..."
   sudo apt-get purge -y veracrypt
 fi

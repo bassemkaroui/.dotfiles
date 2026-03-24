@@ -6,6 +6,7 @@
 - Rust (latest)
 - Go (latest)
 - Node.js (latest)
+- Zig (0.15.2)
 - Neovim (stable, binary managed by mise)
 
 **How it works:**

@@ -109,7 +109,7 @@ rules = [
 
 [tasks]
 micro_workers = 10
-macro_workers = 10
+macro_workers = 5
 bizarre_retry = 3
 image_alloc = 536870912  # 512MB
 image_bound = [0, 0]
@@ -193,7 +193,7 @@ prepend_previewers = [
 prepend_preloaders = [
 	{ name = "*.csv", run = "duckdb", multi = false },
 	{ name = "*.tsv", run = "duckdb", multi = false },
-	{ name = "*.json", run = "duckdb", multi = false },
+	# { name = "*.json", run = "duckdb", multi = false },
 	{ name = "*.parquet", run = "duckdb", multi = false },
 	# { name = "*.txt", run = "duckdb", multi = false },
 	{ name = "*.xlsx", run = "duckdb", multi = false },

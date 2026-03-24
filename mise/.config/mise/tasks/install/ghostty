@@ -1,0 +1,308 @@
+#!/usr/bin/env bash
+#MISE description="Install Ghostty terminal (laptop only, deb/appimage/source/snap)"
+#MISE depends=["install:runtimes"]
+#MISE raw=true
+set -eo pipefail
+
+# ─── Helpers ───────────────────────────────────────────────────────────────────
+
+TASK_NAME="install:ghostty"
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../lib/helpers.sh"
+
+DOTFILES_DIR="${DOTFILES_DIR:-$HOME/.dotfiles}"
+
+# ─── Phase 1: Device type check ───────────────────────────────────────────────
+
+info "Phase 1: Detect device type"
+DEVICE_TYPE_FILE="$DOTFILES_DIR/.device-type"
+
+if [[ -n "${DOTFILES_DEVICE:-}" ]]; then
+    DEVICE_TYPE="$DOTFILES_DEVICE"
+    info "Using DOTFILES_DEVICE from environment: $DEVICE_TYPE"
+elif [[ -f "$DEVICE_TYPE_FILE" ]]; then
+    DEVICE_TYPE="$(<"$DEVICE_TYPE_FILE")"
+    info "Using persisted device type: $DEVICE_TYPE"
+else
+    if ls /sys/class/power_supply/BAT* &>/dev/null 2>&1; then
+        DEVICE_TYPE="laptop"
+    else
+        DEVICE_TYPE="desktop"
+    fi
+    info "Auto-detected device type: $DEVICE_TYPE"
+    printf 'Device type is "%s". Change? [l]aptop / [d]esktop / [n]one / Enter to keep: ' "$DEVICE_TYPE"
+    read -r CHANGE_DEVICE
+    case "${CHANGE_DEVICE,,}" in
+    l | laptop)
+        DEVICE_TYPE="laptop"
+        info "Switched to: laptop"
+        ;;
+    d | desktop)
+        DEVICE_TYPE="desktop"
+        info "Switched to: desktop"
+        ;;
+    n | none)
+        DEVICE_TYPE="none"
+        info "Switched to: none (device-specific configs will be skipped)"
+        ;;
+    "") ;; # keep current
+    *) warn "Unrecognized input '$CHANGE_DEVICE', keeping: $DEVICE_TYPE" ;;
+    esac
+fi
+
+ok "Device type: $DEVICE_TYPE"
+
+# Persist device type for future runs
+printf '%s' "$DEVICE_TYPE" >"$DEVICE_TYPE_FILE"
+
+if [[ "$DEVICE_TYPE" != "laptop" ]]; then
+    warn "Ghostty install is only supported on laptop devices (current: $DEVICE_TYPE). Skipping."
+    exit 0
+fi
+
+# ─── Phase 2: Fetch latest version ────────────────────────────────────────────
+
+info "Phase 2: Fetch latest Ghostty release version"
+GHOSTTY_VERSION=$(curl -fsSL "https://api.github.com/repos/ghostty-org/ghostty/tags?per_page=1" \
+    | grep '"name"' | head -1 | sed -E 's/.*"v([^"]+)".*/\1/')
+
+if [[ -z "$GHOSTTY_VERSION" ]]; then
+    fail "Could not determine latest Ghostty release version"
+fi
+ok "Latest Ghostty version: $GHOSTTY_VERSION"
+
+# ─── Phase 3: Check if already installed / offer update ───────────────────────
+
+info "Phase 3: Check if Ghostty is already installed"
+if command -v ghostty &>/dev/null; then
+    CURRENT_VERSION=$(ghostty --version 2>&1 | head -1 | sed -E 's/[^0-9]*([0-9]+\.[0-9]+\.[0-9]+).*/\1/')
+    ok "Ghostty installed: $CURRENT_VERSION"
+
+    if [[ "$CURRENT_VERSION" == "$GHOSTTY_VERSION" ]]; then
+        ok "Ghostty is up to date ($CURRENT_VERSION)"
+        exit 0
+    fi
+
+    warn "Newer version available: $CURRENT_VERSION → $GHOSTTY_VERSION"
+    printf 'Update Ghostty to %s? [y/N]: ' "$GHOSTTY_VERSION"
+    read -r CONFIRM_UPDATE
+    if [[ "${CONFIRM_UPDATE,,}" != "y" ]]; then
+        info "Update skipped."
+        exit 0
+    fi
+    info "Proceeding with update to $GHOSTTY_VERSION..."
+fi
+
+# ─── Phase 4: Choose install method ───────────────────────────────────────────
+
+info "Phase 4: Choose install method"
+printf 'Install method: [d]eb (PPA) / [a]ppimage / [s]ource / s[n]ap: '
+read -r INSTALL_METHOD
+
+case "${INSTALL_METHOD,,}" in
+    d | deb)      INSTALL_METHOD="deb" ;;
+    a | appimage) INSTALL_METHOD="appimage" ;;
+    s | source)   INSTALL_METHOD="source" ;;
+    n | snap)     INSTALL_METHOD="snap" ;;
+    *)
+        fail "Unrecognized install method '$INSTALL_METHOD'. Use 'd' for deb, 'a' for appimage, 's' for source, or 'n' for snap."
+        ;;
+esac
+ok "Install method: $INSTALL_METHOD"
+
+# ─── Phase 5: Install Ghostty ─────────────────────────────────────────────────
+
+if [[ "$INSTALL_METHOD" == "deb" ]]; then
+
+    # ─── Deb (PPA) install path ───────────────────────────────────────────────
+    info "Phase 5: Install Ghostty via deb (PPA)"
+
+    if ! command -v sudo &>/dev/null; then
+        fail "sudo not available — cannot install via deb"
+    fi
+
+    if ! command -v add-apt-repository &>/dev/null; then
+        info "Installing software-properties-common..."
+        sudo apt-get install -y software-properties-common || fail "Failed to install software-properties-common"
+    fi
+
+    info "Adding PPA: ppa:mkasberg/ghostty-ubuntu"
+    sudo add-apt-repository -y ppa:mkasberg/ghostty-ubuntu || fail "Failed to add Ghostty PPA"
+    sudo apt-get update || fail "Failed to update apt cache"
+
+    info "Installing Ghostty..."
+    sudo apt-get install -y ghostty || fail "Failed to install Ghostty via deb"
+    ok_changed "Ghostty installed via deb (PPA)"
+
+elif [[ "$INSTALL_METHOD" == "appimage" ]]; then
+
+    # ─── AppImage install path ────────────────────────────────────────────────
+    info "Phase 5: Install Ghostty via AppImage"
+
+    ARCH=$(uname -m)
+    case "$ARCH" in
+        x86_64)  APPIMAGE_ARCH="x86_64" ;;
+        aarch64) APPIMAGE_ARCH="aarch64" ;;
+        *)       fail "Unsupported architecture for AppImage: $ARCH" ;;
+    esac
+
+    APPIMAGE_URL=$(curl -fsSL "https://api.github.com/repos/pkgforge-dev/ghostty-appimage/releases/latest" \
+        | grep '"browser_download_url"' \
+        | grep "${APPIMAGE_ARCH}\.AppImage\"" \
+        | head -1 \
+        | sed -E 's/.*"(https[^"]+)".*/\1/')
+
+    if [[ -z "$APPIMAGE_URL" ]]; then
+        fail "Could not find AppImage download URL for $APPIMAGE_ARCH"
+    fi
+
+    mkdir -p "$HOME/.local/bin"
+    APPIMAGE_DEST="$HOME/.local/bin/ghostty"
+
+    info "Downloading Ghostty AppImage ($APPIMAGE_ARCH)..."
+    curl -fSL -o "$APPIMAGE_DEST" "$APPIMAGE_URL" || fail "Failed to download AppImage"
+    chmod +x "$APPIMAGE_DEST"
+    ok_changed "Ghostty AppImage installed to $APPIMAGE_DEST"
+
+    # Ensure ~/.local/bin is in PATH for current session
+    if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
+        export PATH="$HOME/.local/bin:$PATH"
+    fi
+
+elif [[ "$INSTALL_METHOD" == "snap" ]]; then
+
+    # ─── Snap install path ────────────────────────────────────────────────────
+    info "Phase 5: Install Ghostty via snap"
+
+    # Workaround: /etc/ld.so.preload (Citrix AppProtection) injects a library
+    # that depends on libX11, breaking snap at the dynamic linker level.
+    # Temporarily rename the file so snap can run, then restore it.
+    PRELOAD_DISABLED=false
+    if [[ -f /etc/ld.so.preload ]]; then
+        warn "/etc/ld.so.preload detected — temporarily disabling (Citrix AppProtection workaround)"
+        sudo mv /etc/ld.so.preload /etc/ld.so.preload.bak || fail "Failed to disable /etc/ld.so.preload"
+        PRELOAD_DISABLED=true
+        trap 'sudo mv /etc/ld.so.preload.bak /etc/ld.so.preload 2>/dev/null' EXIT
+    fi
+
+    if ! command -v snap &>/dev/null; then
+        info "Installing snapd..."
+        if command -v sudo &>/dev/null; then
+            sudo apt install -y snapd || fail "Failed to install snapd"
+            ok_changed "snapd installed"
+        else
+            fail "sudo not available — cannot install snapd"
+        fi
+    else
+        ok "snapd already installed"
+    fi
+
+    info "Installing Ghostty via snap..."
+    sudo snap install ghostty --classic || fail "Failed to install Ghostty via snap"
+    ok_changed "Ghostty installed via snap"
+
+    # Restore /etc/ld.so.preload immediately (trap also covers failures)
+    if [[ "$PRELOAD_DISABLED" == true ]] && [[ -f /etc/ld.so.preload.bak ]]; then
+        sudo mv /etc/ld.so.preload.bak /etc/ld.so.preload
+        ok "Restored /etc/ld.so.preload"
+    fi
+
+else
+
+    # ─── Source build path ────────────────────────────────────────────────────
+    info "Phase 5a: Ensure Zig is available"
+    mise install zig
+    eval "$(mise env)"
+    if ! command -v zig &>/dev/null; then
+        fail "Zig not found after mise install. Cannot build Ghostty."
+    fi
+    ok "Zig available: $(zig version)"
+
+    info "Phase 5b: Install system build dependencies"
+
+    GHOSTTY_DEPS=(
+        libgtk-4-dev
+        libadwaita-1-dev
+        gettext
+        libxml2-utils
+    )
+
+    GTK4_LAYER_SHELL=true
+
+    if command -v dpkg &>/dev/null && command -v apt-get &>/dev/null; then
+        if apt-cache show libgtk4-layer-shell-dev &>/dev/null 2>&1; then
+            GHOSTTY_DEPS+=(libgtk4-layer-shell-dev)
+        else
+            warn "libgtk4-layer-shell-dev not available in repos — will build without it"
+            GTK4_LAYER_SHELL=false
+        fi
+
+        missing=()
+        for pkg in "${GHOSTTY_DEPS[@]}"; do
+            if ! dpkg -s "$pkg" &>/dev/null; then
+                missing+=("$pkg")
+            fi
+        done
+
+        if [[ ${#missing[@]} -gt 0 ]]; then
+            info "Installing missing packages: ${missing[*]}"
+            if command -v sudo &>/dev/null; then
+                if ! sudo apt-get install -y "${missing[@]}"; then
+                    fail "Failed to install system dependencies: ${missing[*]}"
+                fi
+                ok_changed "System dependencies installed"
+            else
+                fail "sudo not available — cannot install: ${missing[*]}"
+            fi
+        else
+            ok "All system dependencies already installed"
+        fi
+    else
+        warn "Not an apt-based system — ensure GTK4, libadwaita, gettext, and libxml2-utils are installed"
+    fi
+
+    info "Phase 5c: Download and build Ghostty"
+
+    GHOSTTY_TARBALL="ghostty-${GHOSTTY_VERSION}.tar.gz"
+    GHOSTTY_URL="https://release.files.ghostty.org/${GHOSTTY_VERSION}/${GHOSTTY_TARBALL}"
+
+    TMPDIR_GHOSTTY="$(mktemp -d)"
+    trap 'rm -rf "$TMPDIR_GHOSTTY"' EXIT
+
+    info "Downloading Ghostty ${GHOSTTY_VERSION}..."
+    curl -fSL -o "$TMPDIR_GHOSTTY/$GHOSTTY_TARBALL" "$GHOSTTY_URL"
+
+    cd "$TMPDIR_GHOSTTY"
+    tar xzf "$GHOSTTY_TARBALL"
+    cd "ghostty-${GHOSTTY_VERSION}/"
+
+    BUILD_FLAGS=(-p "$HOME/.local" -Doptimize=ReleaseFast)
+    if [[ "$GTK4_LAYER_SHELL" == false ]]; then
+        BUILD_FLAGS+=(-fno-sys=gtk4-layer-shell)
+    fi
+
+    info "Building Ghostty (this may take a while)..."
+    zig build "${BUILD_FLAGS[@]}"
+
+    cd "$HOME"
+
+    # Ensure ~/.local/bin is in PATH for current session
+    if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
+        export PATH="$HOME/.local/bin:$PATH"
+    fi
+
+fi
+
+# ─── Phase 6: Verify ──────────────────────────────────────────────────────────
+
+info "Phase 6: Verify installation"
+if command -v ghostty &>/dev/null; then
+    ok_changed "Ghostty installed: $(ghostty --version 2>&1 | head -1)"
+else
+    fail "Ghostty installation failed — binary not found in PATH"
+fi
+
+printf '\n'
+info "============================================"
+info "  Ghostty installation complete!"
+info "============================================"
+printf '\n'
