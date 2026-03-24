@@ -27,7 +27,7 @@ next_backup_path() {
 DOTFILES_DIR="$HOME/.dotfiles"
 CUSTOM_DIR="${DOTFILES_CUSTOM_DIR:-$HOME/.dotfiles-custom}"
 
-RECURSE_DIRS=(.gnupg .config/gh .claude)
+RECURSE_DIRS=(.gnupg .config/gh .claude .ssh)
 
 # Custom packages arrays — populated after Phase 3 (needs DEVICE_TAG)
 CUSTOM_PACKAGES=()
@@ -219,7 +219,7 @@ if [[ -f "$CUSTOM_FILE" ]]; then
             local_name="${BASH_REMATCH[1]}"
             local_tag="${BASH_REMATCH[3]:-default}"
         elif [[ "$line" =~ ^recurse_dirs=(.+)$ ]]; then
-            IFS=',' read -ra rdirs <<< "${BASH_REMATCH[1]}"
+            IFS=',' read -ra rdirs <<<"${BASH_REMATCH[1]}"
             for rd in "${rdirs[@]}"; do
                 rd="${rd// /}"
                 [[ -n "$rd" ]] && RECURSE_DIRS+=("$rd")
