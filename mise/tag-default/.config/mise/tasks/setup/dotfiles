@@ -283,8 +283,8 @@ ok_changed "Packages deployed: ${STOWED_PACKAGES[*]}"
 if ((${#CUSTOM_PACKAGES[@]} > 0)); then
     info "Deploying custom packages (from $CUSTOM_DIR)"
     for i in "${!CUSTOM_PACKAGES[@]}"; do
-        local cpkg="${CUSTOM_PACKAGES[$i]}"
-        local ctag="${CUSTOM_PKG_TAGS[$i]}"
+        cpkg="${CUSTOM_PACKAGES[$i]}"
+        ctag="${CUSTOM_PKG_TAGS[$i]}"
         if [[ ! -d "$CUSTOM_DIR/$cpkg/tag-$ctag" ]]; then
             warn "Custom package '$cpkg' tag-$ctag directory missing in $CUSTOM_DIR, skipping"
             continue

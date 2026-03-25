@@ -132,12 +132,14 @@ stow_output="$(stow -nv -d "$HOME/.dotfiles/mise" -t ~ tag-default 2>&1)" || tru
 if echo "$stow_output" | grep -q "LINK:"; then
     # Fresh deploy — no conflicts, just needs linking
     backup_mise_conflicts "$HOME/.dotfiles/mise/tag-default" "$HOME"
-    stow -d "$HOME/.dotfiles/mise" -R -t ~ tag-default
+    stow -d "$HOME/.dotfiles/mise" -R -t ~ tag-default 2>&1 \
+        | { grep -v '^BUG in find_stowed_path' || true; }
     ok_changed "mise config deployed to ~/.config/mise/"
 elif echo "$stow_output" | grep -qi "conflict"; then
     # Real files exist that block stow — back up and force deploy
     backup_mise_conflicts "$HOME/.dotfiles/mise/tag-default" "$HOME"
-    stow -d "$HOME/.dotfiles/mise" -R -t ~ tag-default
+    stow -d "$HOME/.dotfiles/mise" -R -t ~ tag-default 2>&1 \
+        | { grep -v '^BUG in find_stowed_path' || true; }
     ok_changed "mise config deployed to ~/.config/mise/ (conflicts resolved via backup)"
 else
     ok "mise config already deployed"

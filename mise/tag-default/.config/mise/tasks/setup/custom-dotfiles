@@ -356,14 +356,26 @@ remove_custom_package() {
             info "  Unstowing $pkg (tag: $tag)..."
             stow -D -d "$CUSTOM_DIR/$pkg" -t "$HOME" "tag-$tag" 2>/dev/null || true
 
-            # Restore any .bak backups
-            while IFS= read -r -d '' bak_file; do
-                local orig="${bak_file%.bak}"
-                if [[ ! -e "$orig" ]]; then
-                    mv "$bak_file" "$orig"
-                    info "  Restored backup: $orig"
+            # Restore backups scoped to this package's files
+            while IFS= read -r -d '' rel_path; do
+                [[ -z "$rel_path" ]] && continue
+                local target="$HOME/$rel_path"
+                local restore_from=""
+                local i=1
+                if [[ -e "$target.bak" ]]; then
+                    restore_from="$target.bak"
                 fi
-            done < <(find "$HOME" -name "*.bak" -print0 2>/dev/null || true)
+                while [[ -e "$target.bak.$i" ]]; do
+                    restore_from="$target.bak.$i"
+                    ((i++))
+                done
+                if [[ -n "$restore_from" ]]; then
+                    mv "$restore_from" "$target"
+                    info "  Restored backup: $restore_from -> $target"
+                fi
+            done < <(find "$tag_dir" -mindepth 1 \( -type f -o -type l \) \
+                -not -path '*/.git/*' -not -name '.git' \
+                -printf '%P\0' 2>/dev/null)
 
             rm -rf "$tag_dir"
             info "  Removed tag directory: $pkg/tag-$tag"
@@ -456,8 +468,8 @@ if [[ -f "$HOME/.p10k.zsh" && ! -L "$HOME/.p10k.zsh" ]] \
     info "Auto-adding as a custom package..."
 
     if ensure_custom_dir; then
-        local pkg_tag="default"
-        local pkg_dir="$CUSTOM_DIR/p10k/tag-$pkg_tag"
+        pkg_tag="default"
+        pkg_dir="$CUSTOM_DIR/p10k/tag-$pkg_tag"
         mkdir -p "$pkg_dir"
         cp "$HOME/.p10k.zsh" "$pkg_dir/.p10k.zsh"
 
@@ -482,7 +494,7 @@ fi
 # Interactive add/remove loop
 while true; do
     if ((${#PKG_NAMES[@]} > 0)); then
-        local pkg_list=""
+        pkg_list=""
         for i in "${!PKG_NAMES[@]}"; do
             [[ -n "$pkg_list" ]] && pkg_list+=", "
             pkg_list+="${PKG_NAMES[$i]}:${PKG_TAGS[$i]}"
