@@ -494,7 +494,7 @@ if [[ -f "$HOME/.p10k.zsh" && ! -L "$HOME/.p10k.zsh" ]] \
     info "Auto-adding as a custom package..."
 
     if ensure_custom_dir; then
-        pkg_tag="default"
+        pkg_tag="$DEVICE_TAG"
         pkg_dir="$CUSTOM_DIR/p10k/tag-$pkg_tag"
         mkdir -p "$pkg_dir"
         cp "$HOME/.p10k.zsh" "$pkg_dir/.p10k.zsh"
