@@ -67,7 +67,7 @@ if [[ ! -f "$STOW_EXCLUDE_FILE" ]]; then
     cat >"$STOW_EXCLUDE_FILE" <<'HEADER'
 # Stow package exclusion list (per-machine, gitignored)
 # Add one package name per line to skip it during setup:dotfiles
-# Available packages: bash fzf git gnome_themes gpg zsh tmux bat yazi mise nvim gh gh-dash claude ghostty ssh p10k
+# Available packages: bash fzf gnome_themes gpg zsh tmux bat yazi mise nvim gh gh-dash claude ghostty ssh p10k
 HEADER
     info "Created $STOW_EXCLUDE_FILE — edit to skip packages on this machine"
 fi

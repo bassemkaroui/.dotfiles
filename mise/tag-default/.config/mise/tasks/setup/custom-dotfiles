@@ -25,6 +25,10 @@ NON_PKG_DIRS=(.git .github .claude scripts)
 home_relative_path() {
     local abs_path
     abs_path="$(realpath "$1")"
+    if [[ "$abs_path" == "$HOME" ]]; then
+        printf '%s' ""
+        return
+    fi
     printf '%s' "${abs_path#"$HOME"/}"
 }
 
@@ -356,7 +360,29 @@ remove_custom_package() {
             info "  Unstowing $pkg (tag: $tag)..."
             stow -D -d "$CUSTOM_DIR/$pkg" -t "$HOME" "tag-$tag" 2>/dev/null || true
 
-            # Restore backups scoped to this package's files
+            # Restore directory-level backups (backup_conflicts backs up package-owned dirs wholesale)
+            while IFS= read -r -d '' top_entry; do
+                [[ -z "$top_entry" ]] && continue
+                local target="$HOME/$top_entry"
+                [[ -e "$target" || -L "$target" ]] && continue
+                local restore_from=""
+                local i=1
+                if [[ -e "$target.bak" ]]; then
+                    restore_from="$target.bak"
+                fi
+                while [[ -e "$target.bak.$i" ]]; do
+                    restore_from="$target.bak.$i"
+                    ((i++))
+                done
+                if [[ -n "$restore_from" ]]; then
+                    mv "$restore_from" "$target"
+                    info "  Restored backup: $restore_from -> $target"
+                fi
+            done < <(find "$tag_dir" -mindepth 1 -maxdepth 1 \
+                -not -name '.' -not -name '..' \
+                -printf '%P\0' 2>/dev/null)
+
+            # Restore file-level backups (for files inside shared/recurse dirs)
             while IFS= read -r -d '' rel_path; do
                 [[ -z "$rel_path" ]] && continue
                 local target="$HOME/$rel_path"

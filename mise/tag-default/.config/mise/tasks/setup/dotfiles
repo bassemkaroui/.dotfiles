@@ -252,6 +252,15 @@ done
 
 compute_shared_dirs "${ALL_PKG_DIRS[@]}"
 
+# ─── Phase 3.5: Unstow excluded packages ────────────────────────────────────
+
+if ((${#EXCLUDED[@]} > 0)); then
+    info "Unstowing excluded packages: ${EXCLUDED[*]}"
+    for pkg in "${EXCLUDED[@]}"; do
+        unstow_package "$pkg"
+    done
+fi
+
 # ─── Phase 4: Deploy packages ───────────────────────────────────────────────
 
 info "Phase 4: Deploy stow packages (tag: $DEVICE_TAG)"
@@ -333,8 +342,11 @@ fi
 # ─── Phase 7: Verify ─────────────────────────────────────────────────────────
 
 info "Phase 7: Verification"
-VERIFY_FILES=("$HOME/.zshrc" "$HOME/.gitconfig" "$HOME/.config/nvim/init.lua" "$HOME/.claude/settings.json")
-# Add device-tag-specific files if they were stowed
+VERIFY_FILES=("$HOME/.zshrc" "$HOME/.config/nvim/init.lua" "$HOME/.claude/settings.json")
+# Add package-specific files only if they were stowed
+if in_array "git" "${STOWED_PACKAGES[@]}"; then
+    VERIFY_FILES+=("$HOME/.gitconfig")
+fi
 if in_array "ssh" "${STOWED_PACKAGES[@]}"; then
     VERIFY_FILES+=("$HOME/.ssh/config")
 fi

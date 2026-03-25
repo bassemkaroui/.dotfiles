@@ -22,7 +22,7 @@ STOW_EXCLUDE_FILE="$DOTFILES_DIR/.stow-exclude"
 CUSTOM_FILE="$CUSTOM_DIR/.custom-packages"
 
 # Canonical list of default stow packages (shared across tasks)
-ALL_DEFAULT_PACKAGES=(bash fzf git gnome_themes gpg zsh tmux bat yazi mise nvim gh gh-dash claude ghostty ssh p10k)
+ALL_DEFAULT_PACKAGES=(bash fzf gnome_themes gpg zsh tmux bat yazi mise nvim gh gh-dash claude ghostty p10k)
 
 # ─── Shared utilities ─────────────────────────────────────────────────────────
 
@@ -83,7 +83,7 @@ unstow_package() {
         local tag_name
         tag_name="$(basename "$tag_dir")"
         # Only unstow and log if this tag actually has stowed symlinks
-        if stow -D -n -v -d "$base_dir/$pkg" -t "$HOME" "$tag_name" 2>&1 | grep -q '^UNLINK:'; then
+        if stow -D -n -v -d "$base_dir/$pkg" -t "$HOME" "$tag_name" 2>&1 | grep -c '^UNLINK:' > /dev/null; then
             stow -D -d "$base_dir/$pkg" -t "$HOME" "$tag_name" 2>/dev/null || true
             info "  Unstowed: $pkg/$tag_name"
         fi
@@ -97,6 +97,30 @@ unstow_package() {
 
     for pkg_dir in "${search_dirs[@]}"; do
         [[ -d "$pkg_dir" ]] || continue
+
+        # Restore directory-level backups (backup_conflicts backs up package-owned dirs wholesale)
+        while IFS= read -r -d '' top_entry; do
+            [[ -z "$top_entry" ]] && continue
+            local target="$HOME/$top_entry"
+            [[ -e "$target" || -L "$target" ]] && continue
+            local restore_from=""
+            local i=1
+            if [[ -e "$target.bak" ]]; then
+                restore_from="$target.bak"
+            fi
+            while [[ -e "$target.bak.$i" ]]; do
+                restore_from="$target.bak.$i"
+                ((i++))
+            done
+            if [[ -n "$restore_from" ]]; then
+                mv "$restore_from" "$target"
+                info "  Restored: $restore_from -> $target"
+            fi
+        done < <(find "$pkg_dir" -mindepth 1 -maxdepth 1 \
+            -not -name '.' -not -name '..' \
+            -printf '%P\0' 2>/dev/null)
+
+        # Restore file-level backups (for files inside shared/recurse dirs)
         while IFS= read -r -d '' rel_path; do
             [[ -z "$rel_path" ]] && continue
             local target="$HOME/$rel_path"
