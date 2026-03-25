@@ -8,11 +8,6 @@ set -eo pipefail
 TASK_NAME="setup:custom-dotfiles"
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../lib/helpers.sh"
 
-DOTFILES_DIR="$HOME/.dotfiles"
-CUSTOM_DIR="${DOTFILES_CUSTOM_DIR:-$HOME/.dotfiles-custom}"
-CUSTOM_FILE="$CUSTOM_DIR/.custom-packages"
-DEVICE_TAG_FILE="$DOTFILES_DIR/.device-tag"
-
 # Read current device tag (default to "default" if not set)
 if [[ -f "$DEVICE_TAG_FILE" ]]; then
     DEVICE_TAG="$(<"$DEVICE_TAG_FILE")"
@@ -20,156 +15,10 @@ else
     DEVICE_TAG="default"
 fi
 
-# Default packages (must match setup:dotfiles array)
-ALL_DEFAULT_PACKAGES=(bash fzf git gnome_themes gpg zsh tmux bat yazi mise nvim gh gh-dash claude ghostty ssh p10k)
-
 # Known non-package directories at repo root
 NON_PKG_DIRS=(.git .github .claude scripts)
 
-# ─── INI Parser/Writer ────────────────────────────────────────────────────────
-
-# Parallel arrays populated by read_custom_packages()
-PKG_NAMES=()
-PKG_TAGS=()
-PKG_SOURCES=()
-PKG_TYPES=()
-PKG_RECURSE_DIRS=()
-
-read_custom_packages() {
-    PKG_NAMES=()
-    PKG_TAGS=()
-    PKG_SOURCES=()
-    PKG_TYPES=()
-    PKG_RECURSE_DIRS=()
-
-    [[ -f "$CUSTOM_FILE" ]] || return 0
-
-    local current_name="" current_tag="" current_source="" current_type="" current_recurse=""
-
-    while IFS= read -r line; do
-        line="${line%%#*}"           # strip comments
-        [[ -z "${line// /}" ]] && continue
-
-        if [[ "$line" =~ ^\[([^:]+)(:(.+))?\]$ ]]; then
-            # Save previous package if any
-            if [[ -n "$current_name" ]]; then
-                PKG_NAMES+=("$current_name")
-                PKG_TAGS+=("$current_tag")
-                PKG_SOURCES+=("$current_source")
-                PKG_TYPES+=("$current_type")
-                PKG_RECURSE_DIRS+=("$current_recurse")
-            fi
-            current_name="${BASH_REMATCH[1]}"
-            current_tag="${BASH_REMATCH[3]:-default}"
-            current_source=""
-            current_type="full"
-            current_recurse=""
-        elif [[ "$line" =~ ^source=(.+)$ ]]; then
-            current_source="${BASH_REMATCH[1]}"
-            # Expand ~ to $HOME
-            current_source="${current_source/#\~/$HOME}"
-        elif [[ "$line" =~ ^type=(.+)$ ]]; then
-            current_type="${BASH_REMATCH[1]}"
-        elif [[ "$line" =~ ^recurse_dirs=(.+)$ ]]; then
-            current_recurse="${BASH_REMATCH[1]}"
-        fi
-    done <"$CUSTOM_FILE"
-
-    # Don't forget last package
-    if [[ -n "$current_name" ]]; then
-        PKG_NAMES+=("$current_name")
-        PKG_TAGS+=("$current_tag")
-        PKG_SOURCES+=("$current_source")
-        PKG_TYPES+=("$current_type")
-        PKG_RECURSE_DIRS+=("$current_recurse")
-    fi
-}
-
-write_custom_packages() {
-    {
-        printf '# Custom dotfiles packages (managed by setup:custom-dotfiles)\n'
-        printf '# Do not edit manually — use: mise run setup:custom-dotfiles\n\n'
-
-        for i in "${!PKG_NAMES[@]}"; do
-            if [[ "${PKG_TAGS[$i]}" == "default" ]]; then
-                printf '[%s]\n' "${PKG_NAMES[$i]}"
-            else
-                printf '[%s:%s]\n' "${PKG_NAMES[$i]}" "${PKG_TAGS[$i]}"
-            fi
-            printf 'source=%s\n' "${PKG_SOURCES[$i]}"
-            printf 'type=%s\n' "${PKG_TYPES[$i]}"
-            if [[ -n "${PKG_RECURSE_DIRS[$i]}" ]]; then
-                printf 'recurse_dirs=%s\n' "${PKG_RECURSE_DIRS[$i]}"
-            fi
-            printf '\n'
-        done
-    } >"$CUSTOM_FILE"
-}
-
 # ─── Utility functions ────────────────────────────────────────────────────────
-
-in_array() {
-    local needle="$1"
-    shift
-    for item in "$@"; do
-        [[ "$item" == "$needle" ]] && return 0
-    done
-    return 1
-}
-
-# Find next available .bak suffix: .bak, .bak.1, .bak.2, ...
-next_backup_path() {
-    local path="$1"
-    local backup="$path.bak"
-    local i=1
-    while [[ -e "$backup" ]]; do
-        backup="$path.bak.$i"
-        ((i++))
-    done
-    printf '%s' "$backup"
-}
-
-# Unstow a package (all tag-* variants) and restore backups
-unstow_custom_package() {
-    local pkg="$1"
-    local pkg_dir="$CUSTOM_DIR/$pkg"
-
-    # Unstow all tag-* variants
-    for tag_dir in "$pkg_dir"/tag-*/; do
-        [[ -d "$tag_dir" ]] || continue
-        local tag_name
-        tag_name="$(basename "$tag_dir")"
-        stow -D -d "$pkg_dir" -t "$HOME" "$tag_name" 2>/dev/null || true
-        info "  Unstowed: $pkg/$tag_name"
-    done
-
-    [[ -d "$pkg_dir" ]] || return 0
-
-    # Restore backups from all tag variants
-    for tag_dir in "$pkg_dir"/tag-*/; do
-        [[ -d "$tag_dir" ]] || continue
-        while IFS= read -r -d '' rel_path; do
-            [[ -z "$rel_path" ]] && continue
-            local target="$HOME/$rel_path"
-            local restore_from=""
-            local i=1
-            if [[ -e "$target.bak" ]]; then
-                restore_from="$target.bak"
-            fi
-            while [[ -e "$target.bak.$i" ]]; do
-                restore_from="$target.bak.$i"
-                ((i++))
-            done
-            if [[ -n "$restore_from" ]]; then
-                mkdir -p "$(dirname "$target")"
-                mv "$restore_from" "$target"
-                info "  Restored: $restore_from -> $target"
-            fi
-        done < <(find "$tag_dir" -mindepth 1 \( -type f -o -type l \) \
-            -not -path '*/.git/*' -not -name '.git' \
-            -printf '%P\0' 2>/dev/null)
-    done
-}
 
 # Compute the relative path from $HOME to a given path
 # e.g., /home/user/.config/alacritty -> .config/alacritty
@@ -183,8 +32,11 @@ home_relative_path() {
 # ~/.config/alacritty -> alacritty
 # ~/.tool-config -> tool-config
 infer_package_name() {
-    local path="$1"
-    basename "$path"
+    local name
+    name="$(basename "$1")"
+    # Strip leading dot (e.g., .something -> something)
+    name="${name#.}"
+    printf '%s' "$name"
 }
 
 # Check if a path is already a stow symlink pointing into the dotfiles repo
@@ -305,10 +157,23 @@ add_custom_package() {
     read -r pkg_name
     pkg_name="${pkg_name:-$default_name}"
 
-    # Validate: not a default package
+    # Validate: check for conflict with default packages
     if in_array "$pkg_name" "${ALL_DEFAULT_PACKAGES[@]}"; then
-        warn "Package name '$pkg_name' conflicts with a default package"
-        return 1
+        read_exclusions
+        if in_array "$pkg_name" "${EXCLUDED[@]}"; then
+            info "Default package '$pkg_name' is excluded — allowing custom override"
+        else
+            warn "Package '$pkg_name' conflicts with a non-excluded default package"
+            printf '  Add '\''%s'\'' to .stow-exclude? (y/N): ' "$pkg_name"
+            read -r confirm
+            if [[ "$confirm" =~ ^[Yy]$ ]]; then
+                EXCLUDED+=("$pkg_name")
+                write_exclusions
+                info "  Added '$pkg_name' to .stow-exclude"
+            else
+                return 1
+            fi
+        fi
     fi
 
     # Choose tag

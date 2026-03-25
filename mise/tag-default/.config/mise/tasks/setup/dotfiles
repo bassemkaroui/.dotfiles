@@ -8,31 +8,14 @@ set -eo pipefail
 TASK_NAME="setup:dotfiles"
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../lib/helpers.sh"
 
-# Find next available .bak suffix: .bak, .bak.1, .bak.2, ...
-next_backup_path() {
-    local path="$1"
-    local backup="$path.bak"
-    local i=1
-    while [[ -e "$backup" ]]; do
-        backup="$path.bak.$i"
-        ((i++))
-    done
-    printf '%s' "$backup"
-}
-
 # Directories that should always be recursed into (never backed up wholesale).
 # These contain unmanaged files (GPG keys, generated completions, auth tokens)
 # that must be left in place.
-# RECURSE_DIRS=(.gnupg .config/gh .claude .claude/plugins)
-DOTFILES_DIR="$HOME/.dotfiles"
-CUSTOM_DIR="${DOTFILES_CUSTOM_DIR:-$HOME/.dotfiles-custom}"
-
 RECURSE_DIRS=(.gnupg .config/gh .claude .ssh)
 
-# Custom packages arrays — populated after Phase 3 (needs DEVICE_TAG)
+# Custom packages arrays — populated after loading .custom-packages
 CUSTOM_PACKAGES=()
 CUSTOM_PKG_TAGS=()
-CUSTOM_FILE="$CUSTOM_DIR/.custom-packages"
 
 is_recurse_dir() {
     local path="$1"
@@ -171,39 +154,23 @@ info "Phase 2: Verify stow"
 command -v stow &>/dev/null || fail "stow not found. Run: mise run install:stow"
 ok "stow available: $(command -v stow)"
 
-# ─── Phase 3: Resolve device tag ─────────────────────────────────────────────
+# ─── Phase 3: Read device tag and exclusions ─────────────────────────────────
 
-DEVICE_TAG_FILE="$DOTFILES_DIR/.device-tag"
+info "Phase 3: Read device tag and exclusions"
 
-info "Phase 3: Resolve device tag"
-
-# Read old tag before any changes (for detecting tag switches)
-OLD_DEVICE_TAG=""
 if [[ -f "$DEVICE_TAG_FILE" ]]; then
-    OLD_DEVICE_TAG="$(<"$DEVICE_TAG_FILE")"
-fi
-
-if [[ -n "${DOTFILES_TAG:-}" ]]; then
-    DEVICE_TAG="$DOTFILES_TAG"
-    info "Using DOTFILES_TAG from environment: $DEVICE_TAG"
-elif [[ -f "$DEVICE_TAG_FILE" ]]; then
     DEVICE_TAG="$(<"$DEVICE_TAG_FILE")"
-    info "Using persisted device tag: $DEVICE_TAG"
 else
-    printf 'No device tag set. Tag for this machine [default]: '
-    read -r DEVICE_TAG
-    DEVICE_TAG="${DEVICE_TAG:-default}"
+    fail "No .device-tag file found. Run: mise run setup:device-tag"
 fi
-
-# Validate tag
-if [[ ! "$DEVICE_TAG" =~ ^[a-zA-Z0-9_-]+$ ]]; then
-    fail "Invalid device tag '$DEVICE_TAG'. Must contain only letters, numbers, hyphens, and underscores."
-fi
-
 ok "Device tag: $DEVICE_TAG"
 
-# Persist tag for future runs
-printf '%s' "$DEVICE_TAG" >"$DEVICE_TAG_FILE"
+read_exclusions
+if ((${#EXCLUDED[@]} > 0)); then
+    ok "Exclusions: ${EXCLUDED[*]}"
+else
+    ok "No exclusions"
+fi
 
 # ─── Load custom packages (needs DEVICE_TAG for tag resolution) ──────────────
 
@@ -260,219 +227,11 @@ if [[ -f "$CUSTOM_FILE" ]]; then
     unset _seen_cpkg
 fi
 
-# ─── Phase 3.5: Manage stow exclusions ──────────────────────────────────────
-
-STOW_EXCLUDE_FILE="$DOTFILES_DIR/.stow-exclude"
-ALL_PACKAGES=(bash fzf git gnome_themes gpg zsh tmux bat yazi mise nvim gh gh-dash claude ghostty ssh p10k)
-
-info "Phase 3.5: Stow exclusions"
-
-# Create .stow-exclude with header if missing
-if [[ ! -f "$STOW_EXCLUDE_FILE" ]]; then
-    cat >"$STOW_EXCLUDE_FILE" <<'HEADER'
-# Stow package exclusion list (per-machine, gitignored)
-# Add one package name per line to skip it during setup:dotfiles
-# Available packages: bash fzf git gnome_themes gpg zsh tmux bat yazi mise nvim gh gh-dash claude ghostty ssh p10k
-HEADER
-    info "Created $STOW_EXCLUDE_FILE — edit to skip packages on this machine"
-fi
-
-# Read current exclusions from file (strip comments and blank lines)
-read_exclusions() {
-    EXCLUDED=()
-    while IFS= read -r line; do
-        line="${line%%#*}" # strip inline comments
-        line="${line// /}" # strip spaces
-        [[ -z "$line" ]] && continue
-        EXCLUDED+=("$line")
-    done <"$STOW_EXCLUDE_FILE"
-}
-
-# Write exclusions back to file (preserves header comments)
-write_exclusions() {
-    # Keep only comment/blank lines from original, then append exclusions
-    local tmpfile
-    tmpfile="$(mktemp)"
-    grep -E '^\s*(#|$)' "$STOW_EXCLUDE_FILE" >"$tmpfile" || true
-    for pkg in "${EXCLUDED[@]}"; do
-        printf '%s\n' "$pkg" >>"$tmpfile"
-    done
-    mv "$tmpfile" "$STOW_EXCLUDE_FILE"
-}
-
-# Check if a value is in an array
-in_array() {
-    local needle="$1"
-    shift
-    for item in "$@"; do
-        [[ "$item" == "$needle" ]] && return 0
-    done
-    return 1
-}
-
-# Unstow a package and restore backups if any exist
-unstow_package() {
-    local pkg="$1"
-    local base_dir="${2:-$DOTFILES_DIR}"
-
-    # Unstow all tag-* variants (user may have switched tags)
-    for tag_dir in "$base_dir/$pkg"/tag-*/; do
-        [[ -d "$tag_dir" ]] || continue
-        local tag_name
-        tag_name="$(basename "$tag_dir")"
-        stow -D -d "$base_dir/$pkg" -t "$HOME" "$tag_name" 2>/dev/null || true
-        info "  Unstowed: $pkg/$tag_name"
-    done
-
-    # Restore backups: find .bak files that belong to this package
-    local -a search_dirs=()
-    for tag_dir in "$base_dir/$pkg"/tag-*/; do
-        [[ -d "$tag_dir" ]] && search_dirs+=("$tag_dir")
-    done
-
-    for pkg_dir in "${search_dirs[@]}"; do
-        [[ -d "$pkg_dir" ]] || continue
-        while IFS= read -r -d '' rel_path; do
-            [[ -z "$rel_path" ]] && continue
-            local target="$HOME/$rel_path"
-            # Find the highest numbered backup
-            local restore_from=""
-            local i=1
-            if [[ -e "$target.bak" ]]; then
-                restore_from="$target.bak"
-            fi
-            while [[ -e "$target.bak.$i" ]]; do
-                restore_from="$target.bak.$i"
-                ((i++))
-            done
-            if [[ -n "$restore_from" ]]; then
-                mv "$restore_from" "$target"
-                info "  Restored: $restore_from -> $target"
-            fi
-        done < <(find "$pkg_dir" -mindepth 1 \( -type f -o -type l \) \
-            -not -path '*/.git/*' -not -name '.git' \
-            -printf '%P\0' 2>/dev/null)
-    done
-}
-
-# Interactive exclusion management loop
-while true; do
-    read_exclusions
-
-    if ((${#EXCLUDED[@]} > 0)); then
-        info "Currently excluded: ${EXCLUDED[*]}"
-    else
-        info "No packages currently excluded"
-    fi
-
-    printf 'Modify exclusions? [a]dd / [r]emove / Enter to keep: '
-    read -r MODIFY_CHOICE
-
-    case "${MODIFY_CHOICE,,}" in
-    a | add)
-        # Build list of available (non-excluded) packages
-        AVAILABLE=()
-        for pkg in "${ALL_PACKAGES[@]}"; do
-            in_array "$pkg" "${EXCLUDED[@]}" && continue
-            in_array "$pkg" "${CUSTOM_PACKAGES[@]}" && continue
-            AVAILABLE+=("$pkg")
-        done
-        if ((${#AVAILABLE[@]} == 0)); then
-            warn "All packages are already excluded"
-            continue
-        fi
-        info "Available packages:"
-        for i in "${!AVAILABLE[@]}"; do
-            printf '  %d) %s\n' "$((i + 1))" "${AVAILABLE[$i]}"
-        done
-        printf 'Enter numbers to exclude (space-separated), or Enter to cancel: '
-        read -r ADD_CHOICES
-        [[ -z "$ADD_CHOICES" ]] && continue
-        for choice in $ADD_CHOICES; do
-            if [[ "$choice" =~ ^[0-9]+$ ]] && ((choice >= 1 && choice <= ${#AVAILABLE[@]})); then
-                local_pkg="${AVAILABLE[$((choice - 1))]}"
-                EXCLUDED+=("$local_pkg")
-                info "  Added: $local_pkg"
-            else
-                warn "  Invalid selection: $choice"
-            fi
-        done
-        write_exclusions
-        ;;
-    r | remove)
-        if ((${#EXCLUDED[@]} == 0)); then
-            warn "No packages to remove from exclusions"
-            continue
-        fi
-        info "Currently excluded packages:"
-        for i in "${!EXCLUDED[@]}"; do
-            printf '  %d) %s\n' "$((i + 1))" "${EXCLUDED[$i]}"
-        done
-        printf 'Enter numbers to un-exclude (space-separated), or Enter to cancel: '
-        read -r REMOVE_CHOICES
-        [[ -z "$REMOVE_CHOICES" ]] && continue
-        TO_REMOVE=()
-        for choice in $REMOVE_CHOICES; do
-            if [[ "$choice" =~ ^[0-9]+$ ]] && ((choice >= 1 && choice <= ${#EXCLUDED[@]})); then
-                TO_REMOVE+=("${EXCLUDED[$((choice - 1))]}")
-                info "  Removed: ${EXCLUDED[$((choice - 1))]}"
-            else
-                warn "  Invalid selection: $choice"
-            fi
-        done
-        # Rebuild EXCLUDED without removed items
-        NEW_EXCLUDED=()
-        for pkg in "${EXCLUDED[@]}"; do
-            in_array "$pkg" "${TO_REMOVE[@]}" || NEW_EXCLUDED+=("$pkg")
-        done
-        EXCLUDED=("${NEW_EXCLUDED[@]}")
-        write_exclusions
-        ;;
-    "")
-        break
-        ;;
-    *)
-        warn "Unrecognized input '$MODIFY_CHOICE'"
-        ;;
-    esac
-done
-
-# Warn and remove custom packages from exclusions
-read_exclusions
-EXCLUSIONS_CLEANED=false
-for cpkg in "${CUSTOM_PACKAGES[@]}"; do
-    if in_array "$cpkg" "${EXCLUDED[@]}"; then
-        warn "Custom package '$cpkg' found in .stow-exclude — ignoring exclusion"
-        NEW_EXCLUDED=()
-        for pkg in "${EXCLUDED[@]}"; do
-            [[ "$pkg" != "$cpkg" ]] && NEW_EXCLUDED+=("$pkg")
-        done
-        EXCLUDED=("${NEW_EXCLUDED[@]}")
-        EXCLUSIONS_CLEANED=true
-    fi
-done
-if [[ "$EXCLUSIONS_CLEANED" == "true" ]]; then
-    write_exclusions
-    warn "Updated .stow-exclude to remove conflicting custom package entries"
-fi
-
-# Unstow any newly-excluded packages that have symlinks in $HOME
-read_exclusions
-for pkg in "${EXCLUDED[@]}"; do
-    unstow_package "$pkg"
-done
-
-if ((${#EXCLUDED[@]} > 0)); then
-    ok "Exclusions applied: ${EXCLUDED[*]}"
-else
-    ok "No exclusions"
-fi
-
 # ─── Precompute shared directories ───────────────────────────────────────────
 
 # Filter packages based on exclusions
 PACKAGES=()
-for pkg in "${ALL_PACKAGES[@]}"; do
+for pkg in "${ALL_DEFAULT_PACKAGES[@]}"; do
     in_array "$pkg" "${EXCLUDED[@]}" || PACKAGES+=("$pkg")
 done
 

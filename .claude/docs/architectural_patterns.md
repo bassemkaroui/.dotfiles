@@ -17,7 +17,7 @@
 
 **Conflict handling:** `setup:dotfiles` automatically backs up existing files/directories (`.bak` suffix) before stowing. It distinguishes shared directories (e.g., `~/.config`, `~/.gnupg`) from package-owned directories (e.g., `~/.config/yazi`) — shared dirs are descended into, package-owned dirs are backed up as a whole.
 
-**Per-machine exclusions:** A gitignored `.stow-exclude` file at the repo root lets you skip packages on specific machines. `setup:dotfiles` creates this file automatically on first run and prompts interactively each run to add or remove exclusions. When a package is newly excluded, its symlinks are removed via `stow -D` and any previously-backed-up files are restored. The file format is one package name per line, with `#` comments supported.
+**Per-machine exclusions:** A gitignored `.stow-exclude` file at the repo root lets you skip packages on specific machines. The dedicated `setup:exclude` task creates this file automatically on first run and prompts interactively to add or remove exclusions. When a package is newly excluded, its symlinks are removed via `stow -D` and any previously-backed-up files are restored. The file format is one package name per line, with `#` comments supported. Excluded default packages can be overridden by custom packages of the same name (see Custom Packages Extension).
 
 **When applying:** Use Stow for any new tool/service config. Follow directory structure that mirrors `~/.` paths.
 
@@ -88,7 +88,7 @@ To add a new tagged variant, create `<package>/tag-<tag>/` subdirectories with t
 2. Else if `<package>/tag-default/` exists → fallback to that
 3. Else → skip (package not deployed on this machine)
 
-After resolution, the tag is persisted to `.dotfiles/.device-tag` (git-ignored) so subsequent runs skip the prompt. Tags must match `[a-zA-Z0-9_-]+`.
+After resolution, the tag is persisted to `.dotfiles/.device-tag` (git-ignored). On subsequent runs, the current tag is displayed and the user is offered to change it. Changing the tag automatically migrates custom packages tagged with the old tag (unstows, renames `tag-<old>/` → `tag-<new>/`, updates `.custom-packages`). Tags must match `[a-zA-Z0-9_-]+`.
 
 **Same pattern in:**
 - `ssh/tag-desktop/` vs. `ssh/tag-laptop/` — Different SSH key paths/configs per device
@@ -161,8 +161,9 @@ After resolution, the tag is persisted to `.dotfiles/.device-tag` (git-ignored) 
 - If multiple entries exist for the same package, the exact tag match takes priority over default
 
 **Integration with stow-exclude:**
-- Custom packages are **excluded** from `.stow-exclude` proposals (never offered for exclusion)
-- If a custom package is found in `.stow-exclude`, a warning is shown and the entry is removed
+- Custom packages can override excluded default packages: if a default package (e.g., `p10k`) is in `.stow-exclude`, a custom package with the same name is allowed
+- When adding a custom package that conflicts with a non-excluded default, the user is prompted to add the default to `.stow-exclude`
+- Custom packages already in `.stow-exclude` are hidden from the exclusion UI (they can't be offered for exclusion since they live in the custom directory)
 
 **Benefits over branch-based approach:**
 - Custom packages always present regardless of git state on main repo

@@ -61,6 +61,8 @@ stow -d ssh -t ~ tag-laptop                # Deploy a device-specific variant
 | Task                    | Command                          |
 | ----------------------- | -------------------------------- |
 | Full machine setup      | `mise run bootstrap`             |
+| Set/change device tag   | `mise run setup:device-tag`      |
+| Manage exclusions       | `mise run setup:exclude`         |
 | Manage custom configs   | `mise run setup:custom-dotfiles` |
 | Deploy/redeploy configs | `mise run setup:dotfiles`        |
 | Update tmux             | `mise run update:oh-my-tmux`     |

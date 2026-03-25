@@ -1,0 +1,179 @@
+#!/usr/bin/env bash
+#MISE description="Resolve and persist the device tag for this machine"
+#MISE raw=true
+set -eo pipefail
+
+# ─── Helpers ───────────────────────────────────────────────────────────────────
+
+TASK_NAME="setup:device-tag"
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../lib/helpers.sh"
+
+# ─── Migrate custom packages from one tag to another ─────────────────────────
+
+migrate_custom_packages() {
+    local old_tag="$1"
+    local new_tag="$2"
+    local interactive="${3:-true}"
+
+    # Skip if no custom packages exist
+    if [[ ! -d "$CUSTOM_DIR" ]] || [[ ! -f "$CUSTOM_FILE" ]]; then
+        info "No custom packages to migrate"
+        return 0
+    fi
+
+    read_custom_packages
+
+    # Find entries tagged with the old tag
+    local -a migrate_indices=()
+    for i in "${!PKG_NAMES[@]}"; do
+        if [[ "${PKG_TAGS[$i]}" == "$old_tag" ]]; then
+            migrate_indices+=("$i")
+        fi
+    done
+
+    if ((${#migrate_indices[@]} == 0)); then
+        info "No custom packages tagged '$old_tag' — no migration needed"
+        return 0
+    fi
+
+    # Show what will be migrated
+    info "Custom packages tagged '$old_tag' that will be migrated to '$new_tag':"
+    for idx in "${migrate_indices[@]}"; do
+        printf '  - %s (tag-%s → tag-%s)\n' "${PKG_NAMES[$idx]}" "$old_tag" "$new_tag"
+    done
+
+    # Confirm if interactive
+    if [[ "$interactive" == "true" ]]; then
+        printf 'Proceed with migration? (Y/n): '
+        read -r confirm
+        if [[ "$confirm" =~ ^[Nn]$ ]]; then
+            warn "Migration cancelled — device tag not changed"
+            return 1
+        fi
+    fi
+
+    # Perform migration
+    local -a git_changed_dirs=()
+    for idx in "${migrate_indices[@]}"; do
+        local pkg="${PKG_NAMES[$idx]}"
+        local old_dir="$CUSTOM_DIR/$pkg/tag-$old_tag"
+        local new_dir="$CUSTOM_DIR/$pkg/tag-$new_tag"
+
+        # Edge case: new tag directory already exists
+        if [[ -d "$new_dir" ]]; then
+            warn "Directory already exists: $pkg/tag-$new_tag — skipping $pkg"
+            continue
+        fi
+
+        # Unstow the old variant (remove symlinks from $HOME)
+        if [[ -d "$old_dir" ]]; then
+            info "  Unstowing $pkg/tag-$old_tag..."
+            stow -D -d "$CUSTOM_DIR/$pkg" -t "$HOME" "tag-$old_tag" 2>/dev/null || true
+        fi
+
+        # Rename directory
+        mv "$old_dir" "$new_dir"
+        info "  Moved: $pkg/tag-$old_tag → $pkg/tag-$new_tag"
+
+        # Update tracking array
+        PKG_TAGS[$idx]="$new_tag"
+
+        git_changed_dirs+=("$pkg")
+        ok_changed "Migrated: $pkg"
+    done
+
+    # Write updated .custom-packages
+    write_custom_packages
+
+    # Auto-commit in custom dir if it's a git repo
+    if [[ -d "$CUSTOM_DIR/.git" ]] && ((${#git_changed_dirs[@]} > 0)); then
+        cd "$CUSTOM_DIR"
+        for pkg in "${git_changed_dirs[@]}"; do
+            git add -A "$pkg" 2>/dev/null || true
+        done
+        git add .custom-packages
+        git commit -m "custom: migrate tags from $old_tag to $new_tag" || true
+        ok "Committed tag migration in custom repo"
+    fi
+
+    return 0
+}
+
+# ─── Resolve device tag ─────────────────────────────────────────────────────
+
+info "Resolve device tag"
+
+if [[ -n "${DOTFILES_TAG:-}" ]]; then
+    # Environment variable override (non-interactive)
+    NEW_TAG="$DOTFILES_TAG"
+
+    if [[ ! "$NEW_TAG" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+        fail "Invalid device tag '$NEW_TAG'. Must contain only letters, numbers, hyphens, and underscores."
+    fi
+
+    if [[ -f "$DEVICE_TAG_FILE" ]]; then
+        OLD_TAG="$(<"$DEVICE_TAG_FILE")"
+        if [[ "$NEW_TAG" != "$OLD_TAG" ]]; then
+            info "Tag changing from '$OLD_TAG' to '$NEW_TAG' (via DOTFILES_TAG)"
+            migrate_custom_packages "$OLD_TAG" "$NEW_TAG" false
+        fi
+    fi
+
+    DEVICE_TAG="$NEW_TAG"
+    info "Using DOTFILES_TAG from environment: $DEVICE_TAG"
+
+elif [[ -f "$DEVICE_TAG_FILE" ]]; then
+    OLD_TAG="$(<"$DEVICE_TAG_FILE")"
+    info "Current device tag: $OLD_TAG"
+
+    printf 'Change device tag? (y/N): '
+    read -r want_change
+
+    if [[ "$want_change" =~ ^[Yy]$ ]]; then
+        printf 'New tag [default]: '
+        read -r NEW_TAG
+        NEW_TAG="${NEW_TAG:-default}"
+
+        if [[ ! "$NEW_TAG" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+            fail "Invalid device tag '$NEW_TAG'. Must contain only letters, numbers, hyphens, and underscores."
+        fi
+
+        if [[ "$NEW_TAG" == "$OLD_TAG" ]]; then
+            info "Tag unchanged"
+            ok "Device tag: $OLD_TAG"
+            exit 0
+        fi
+
+        # Migrate custom packages — abort tag change if user cancels
+        if ! migrate_custom_packages "$OLD_TAG" "$NEW_TAG" true; then
+            ok "Device tag: $OLD_TAG"
+            exit 0
+        fi
+
+        DEVICE_TAG="$NEW_TAG"
+    else
+        DEVICE_TAG="$OLD_TAG"
+        ok "Device tag: $DEVICE_TAG"
+        exit 0
+    fi
+
+else
+    # First-time setup — no migration needed
+    printf 'No device tag set. Tag for this machine [default]: '
+    read -r DEVICE_TAG
+    DEVICE_TAG="${DEVICE_TAG:-default}"
+
+    if [[ ! "$DEVICE_TAG" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+        fail "Invalid device tag '$DEVICE_TAG'. Must contain only letters, numbers, hyphens, and underscores."
+    fi
+fi
+
+ok "Device tag: $DEVICE_TAG"
+
+# Persist tag for future runs
+printf '%s' "$DEVICE_TAG" >"$DEVICE_TAG_FILE"
+
+# Remind user to redeploy if tag changed
+if [[ -n "${OLD_TAG:-}" && "${OLD_TAG}" != "$DEVICE_TAG" ]]; then
+    info "Run 'mise run setup:dotfiles' to deploy configs with the new tag"
+fi
