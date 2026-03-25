@@ -446,6 +446,39 @@ verify_custom_packages
 # Reload after potential cleanup
 read_custom_packages
 
+# ─── p10k auto-adoption ────────────────────────────────────────────────────
+read_exclusions
+if [[ -f "$HOME/.p10k.zsh" && ! -L "$HOME/.p10k.zsh" ]] \
+    && in_array "p10k" "${EXCLUDED[@]}" \
+    && ! in_array "p10k" "${PKG_NAMES[@]}"; then
+
+    info "Detected ~/.p10k.zsh as a real file with p10k excluded"
+    info "Auto-adding as a custom package..."
+
+    if ensure_custom_dir; then
+        local pkg_tag="default"
+        local pkg_dir="$CUSTOM_DIR/p10k/tag-$pkg_tag"
+        mkdir -p "$pkg_dir"
+        cp "$HOME/.p10k.zsh" "$pkg_dir/.p10k.zsh"
+
+        PKG_NAMES+=("p10k")
+        PKG_TAGS+=("$pkg_tag")
+        PKG_SOURCES+=("~/.p10k.zsh")
+        PKG_TYPES+=("full")
+        PKG_RECURSE_DIRS+=("")
+        write_custom_packages
+
+        if [[ -d "$CUSTOM_DIR/.git" ]]; then
+            git -C "$CUSTOM_DIR" add "p10k" .custom-packages
+            git -C "$CUSTOM_DIR" commit -m "custom: auto-add p10k (wizard output)"
+        fi
+
+        ok_changed "Added p10k as custom package (tag: $pkg_tag)"
+    else
+        warn "Cannot create custom dir — skipping p10k auto-add"
+    fi
+fi
+
 # Interactive add/remove loop
 while true; do
     if ((${#PKG_NAMES[@]} > 0)); then

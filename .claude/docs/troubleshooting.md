@@ -180,8 +180,8 @@ source ~/.zshrc
 
 **Resolution:**
 ```bash
-# Regenerate p10k config
-p10k configure         # Interactive wizard
+# Regenerate p10k config (use mise task to preserve stow setup)
+mise run setup:p10k-configure    # Preferred — handles symlink correctly
 
 # Clear cached instant prompt
 rm -rf ~/.cache/p10k*  # Regenerate on next shell start
@@ -189,6 +189,8 @@ rm -rf ~/.cache/p10k*  # Regenerate on next shell start
 # Verify correct device variant stowed
 ls -la ~/.p10k.zsh     # Check symlink target
 ```
+
+> **Note:** Running `p10k configure` directly clobbers the stow symlink (it writes a real file via atomic rename). If this happens, `setup:exclude` will detect the real file and offer to exclude p10k, and `setup:custom-dotfiles` will auto-add it as a custom package so your wizard output is preserved.
 
 ### Fzf Integration Not Working
 
