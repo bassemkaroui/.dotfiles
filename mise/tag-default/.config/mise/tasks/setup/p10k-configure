@@ -143,15 +143,19 @@ if [[ "$CHANGE_ICON" =~ ^[Yy]$ ]]; then
             # Write to the resolved target if custom, otherwise ~/.p10k.zsh
             P10K_FILE="${P10K_CUSTOM_TARGET:-$HOME/.p10k.zsh}"
             if [[ -f "$P10K_FILE" ]]; then
-                # Use awk to safely handle special characters in the icon
+                # Replace CONTENT_EXPANSION in-place (don't depend on BACKGROUND existing)
                 awk -v icon="$NEW_ICON" '
-                    /POWERLEVEL9K_OS_ICON_CONTENT_EXPANSION/ { next }
-                    /POWERLEVEL9K_OS_ICON_BACKGROUND/ {
-                        print
-                        print "  typeset -g POWERLEVEL9K_OS_ICON_CONTENT_EXPANSION=\047" icon "\047"
+                    /POWERLEVEL9K_OS_ICON_CONTENT_EXPANSION/ {
+                        match($0, /^[[:space:]]*/);
+                        indent = substr($0, RSTART, RLENGTH);
+                        print indent "typeset -g POWERLEVEL9K_OS_ICON_CONTENT_EXPANSION=\047" icon "\047";
+                        found = 1;
                         next
                     }
                     { print }
+                    END {
+                        if (!found) print "WARNING: POWERLEVEL9K_OS_ICON_CONTENT_EXPANSION not found in .p10k.zsh" > "/dev/stderr"
+                    }
                 ' "$P10K_FILE" > "${P10K_FILE}.tmp" && mv -f "${P10K_FILE}.tmp" "$P10K_FILE"
                 ok_changed "OS icon updated in .p10k.zsh"
                 sync_custom_p10k

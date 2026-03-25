@@ -124,6 +124,7 @@ unstow_package() {
         while IFS= read -r -d '' rel_path; do
             [[ -z "$rel_path" ]] && continue
             local target="$HOME/$rel_path"
+            [[ -e "$target" || -L "$target" ]] && continue
             # Find the highest numbered backup
             local restore_from=""
             local i=1
