@@ -82,8 +82,11 @@ unstow_package() {
         [[ -d "$tag_dir" ]] || continue
         local tag_name
         tag_name="$(basename "$tag_dir")"
-        stow -D -d "$base_dir/$pkg" -t "$HOME" "$tag_name" 2>/dev/null || true
-        info "  Unstowed: $pkg/$tag_name"
+        # Only unstow and log if this tag actually has stowed symlinks
+        if stow -D -n -v -d "$base_dir/$pkg" -t "$HOME" "$tag_name" 2>&1 | grep -q '^UNLINK:'; then
+            stow -D -d "$base_dir/$pkg" -t "$HOME" "$tag_name" 2>/dev/null || true
+            info "  Unstowed: $pkg/$tag_name"
+        fi
     done
 
     # Restore backups: find .bak files that belong to this package
