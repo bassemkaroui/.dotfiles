@@ -18,3 +18,6 @@ claude/tag-default/.claude/*
 !claude/tag-default/.claude/keybindings.json
 !claude/tag-default/.claude/settings.json
 !claude/tag-default/.claude/statusline-command.sh
+.sanitize.yml
+scripts/
+.github/
