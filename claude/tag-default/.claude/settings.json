@@ -11,6 +11,7 @@
     "deny": [],
     "defaultMode": "default"
   },
+  "model": "opus",
   "statusLine": {
     "type": "command",
     "command": "bash ~/.claude/statusline-command.sh"
@@ -25,6 +26,5 @@
     "claude-md-management@claude-plugins-official": true,
     "lua-lsp@claude-plugins-official": true
   },
-  "effortLevel": "medium",
-  "model": "opus"
+  "effortLevel": "medium"
 }

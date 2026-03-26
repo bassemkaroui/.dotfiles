@@ -1,3 +1,5 @@
+export MISE_TRUSTED_CONFIG_PATHS="$HOME/.config/mise"
+
 . "$HOME/.cargo/env"
 
 # Begin added by argcomplete

@@ -81,6 +81,7 @@ if (( $+commands[doppler] )); then
     { doppler completion install --no-check-version >/dev/null 2>&1 &| }
 fi
 
+export MISE_TRUSTED_CONFIG_PATHS="$HOME/.config/mise"
 eval "$(mise activate zsh)"
 eval "$(mise hook-env -s zsh)"
 # <<< mise-setup'

@@ -142,4 +142,5 @@ unset __conda_setup
 
 . "$HOME/.cargo/env"
 
+export MISE_TRUSTED_CONFIG_PATHS="$HOME/.config/mise"
 eval "$($HOME/.local/bin/mise activate bash)"
