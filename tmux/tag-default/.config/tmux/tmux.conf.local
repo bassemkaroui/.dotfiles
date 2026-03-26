@@ -460,6 +460,8 @@ tmux_conf_uninstall_plugins_on_reload=true
 #set -g @plugin 'tmux-plugins/tmux-copycat'
 set -g @plugin 'tmux-plugins/tmux-cpu'
 set -g @plugin 'christoomey/vim-tmux-navigator'
+# Forward C-h/j/k/l through SSH panes so remote Neovim receives them (vim-tmux-navigator#41)
+set -g @vim_navigator_pattern '(\S+/)?g?\.?(view|l?n?vim?x?|fzf|ssh|mosh)(diff)?(-wrapped)?'
 set -g @plugin 'sainnhe/tmux-fzf'
 # set -g @plugin 'omerxx/tmux-sessionx'
 set -g @plugin 'tmux-plugins/tmux-resurrect'
