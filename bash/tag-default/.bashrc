@@ -144,3 +144,8 @@ unset __conda_setup
 
 export MISE_TRUSTED_CONFIG_PATHS="$HOME/.config/mise"
 eval "$($HOME/.local/bin/mise activate bash)"
+
+# GitHub token for API access (e.g., remote-nvim downloads)
+if command -v gh &>/dev/null && gh auth status &>/dev/null; then
+    export GITHUB_TOKEN="$(gh auth token 2>/dev/null)"
+fi
