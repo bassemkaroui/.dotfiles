@@ -11,7 +11,7 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../lib/helpers.sh"
 # Directories that should always be recursed into (never backed up wholesale).
 # These contain unmanaged files (GPG keys, generated completions, auth tokens)
 # that must be left in place.
-RECURSE_DIRS=(.gnupg .config/gh .claude .ssh)
+RECURSE_DIRS=(.gnupg .config/gh .claude .ssh .local .local/share)
 
 # Custom packages arrays — populated after loading .custom-packages
 CUSTOM_PACKAGES=()
@@ -260,6 +260,13 @@ if ((${#EXCLUDED[@]} > 0)); then
         unstow_package "$pkg"
     done
 fi
+
+# ─── Pre-deploy: ensure RECURSE_DIRS exist as real directories ────────────
+# Prevents stow from "folding" shared directories (e.g. .local, .config)
+# into symlinks, which would contaminate the package with unrelated files.
+for rd in "${RECURSE_DIRS[@]}"; do
+    mkdir -p "$HOME/$rd"
+done
 
 # ─── Phase 4: Deploy packages ───────────────────────────────────────────────
 

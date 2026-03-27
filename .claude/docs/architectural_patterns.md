@@ -106,7 +106,7 @@ After resolution, the tag is persisted to `.dotfiles/.device-tag` (git-ignored).
 
 ## Graphical Environment Detection
 
-**Pattern:** GUI tool installation (e.g., Ghostty) checks for a graphical environment rather than relying on device type. This is separate from the tag system.
+**Pattern:** GUI tool installation (e.g., Ghostty, GNOME extensions) checks for a graphical environment rather than relying on device type. This is separate from the tag system.
 
 **Detection checks (in order):**
 1. `.graphical-env` pin file — `graphical` forces yes, `server`/`none` forces skip

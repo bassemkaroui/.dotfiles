@@ -1,0 +1,153 @@
+#!/usr/bin/env bash
+#MISE description="Re-export GNOME extensions manifest and dconf settings to custom package"
+#MISE raw=true
+set -eo pipefail
+
+# ─── Helpers ───────────────────────────────────────────────────────────────────
+
+TASK_NAME="update:gnome-ext"
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../lib/helpers.sh"
+
+DOTFILES_DIR="${DOTFILES_DIR:-$HOME/.dotfiles}"
+MANIFEST_LINK="$HOME/.local/share/gnome-extensions/manifest.txt"
+SETTINGS_LINK="$HOME/.local/share/gnome-extensions/extension-settings.dconf"
+
+# ─── Phase 1: Graphical environment check ────────────────────────────────────
+
+info "Phase 1: Detect graphical environment"
+GRAPHICAL_ENV_FILE="$DOTFILES_DIR/.graphical-env"
+HAS_GRAPHICAL=false
+
+if [[ -f "$GRAPHICAL_ENV_FILE" ]]; then
+    GRAPHICAL_PIN="$(<"$GRAPHICAL_ENV_FILE")"
+    case "${GRAPHICAL_PIN,,}" in
+    graphical | yes)
+        HAS_GRAPHICAL=true
+        ;;
+    server | none | no)
+        info "Graphical environment disabled via .graphical-env. Skipping."
+        exit 0
+        ;;
+    esac
+fi
+
+if [[ "$HAS_GRAPHICAL" == false ]]; then
+    if [[ -n "${DISPLAY:-}" || -n "${WAYLAND_DISPLAY:-}" ]]; then
+        HAS_GRAPHICAL=true
+    elif [[ "${XDG_SESSION_TYPE:-}" == "x11" || "${XDG_SESSION_TYPE:-}" == "wayland" ]]; then
+        HAS_GRAPHICAL=true
+    fi
+fi
+
+if [[ "$HAS_GRAPHICAL" == false ]]; then
+    warn "No graphical environment detected. Skipping."
+    exit 0
+fi
+
+ok "Graphical environment confirmed"
+
+# ─── Phase 2: Check prerequisites ────────────────────────────────────────────
+
+info "Phase 2: Check prerequisites"
+
+if ! command -v gnome-extensions &>/dev/null; then
+    fail "gnome-extensions CLI not found"
+fi
+
+if ! command -v dconf &>/dev/null; then
+    fail "dconf CLI not found. Install dconf-cli."
+fi
+
+ok "Prerequisites available"
+
+# ─── Phase 3: Resolve real paths (follow stow symlinks) ─────────────────────
+
+info "Phase 3: Resolve manifest paths"
+
+if [[ ! -e "$MANIFEST_LINK" ]]; then
+    fail "Manifest not found at $MANIFEST_LINK — deploy the gnome_extensions custom package first (mise run setup:dotfiles)"
+fi
+
+# Follow symlink to the real file in ~/.dotfiles-custom/
+MANIFEST_REAL="$(readlink -f "$MANIFEST_LINK")"
+SETTINGS_REAL="$(readlink -f "$SETTINGS_LINK")"
+CUSTOM_PKG_DIR="$(dirname "$MANIFEST_REAL")"
+
+ok "Writing to: $CUSTOM_PKG_DIR/"
+
+# ─── Phase 4: Update manifest ───────────────────────────────────────────────
+
+info "Phase 4: Update extension manifest"
+
+OLD_MANIFEST=""
+if [[ -f "$MANIFEST_REAL" ]]; then
+    OLD_MANIFEST="$(<"$MANIFEST_REAL")"
+fi
+
+gnome-extensions list --user | sort >"$MANIFEST_REAL"
+
+NEW_MANIFEST="$(<"$MANIFEST_REAL")"
+if [[ "$OLD_MANIFEST" == "$NEW_MANIFEST" ]]; then
+    ok "manifest.txt unchanged"
+else
+    ok_changed "manifest.txt updated"
+    # Show diff
+    if [[ -n "$OLD_MANIFEST" ]]; then
+        ADDED="$(comm -13 <(echo "$OLD_MANIFEST") <(echo "$NEW_MANIFEST") || true)"
+        REMOVED="$(comm -23 <(echo "$OLD_MANIFEST") <(echo "$NEW_MANIFEST") || true)"
+        [[ -n "$ADDED" ]] && info "  Added: $(echo "$ADDED" | tr '\n' ' ')"
+        [[ -n "$REMOVED" ]] && info "  Removed: $(echo "$REMOVED" | tr '\n' ' ')"
+    fi
+fi
+
+# ─── Phase 5: Update dconf settings ─────────────────────────────────────────
+
+info "Phase 5: Update extension settings"
+
+OLD_SETTINGS=""
+if [[ -f "$SETTINGS_REAL" ]]; then
+    OLD_SETTINGS="$(<"$SETTINGS_REAL")"
+fi
+
+dconf dump /org/gnome/shell/extensions/ >"$SETTINGS_REAL"
+
+NEW_SETTINGS="$(<"$SETTINGS_REAL")"
+if [[ "$OLD_SETTINGS" == "$NEW_SETTINGS" ]]; then
+    ok "extension-settings.dconf unchanged"
+else
+    ok_changed "extension-settings.dconf updated"
+fi
+
+# ─── Phase 6: Auto-commit if git repo ───────────────────────────────────────
+
+info "Phase 6: Auto-commit"
+
+# Walk up from the manifest to find the git root (should be ~/.dotfiles-custom)
+GIT_ROOT=""
+check_dir="$CUSTOM_PKG_DIR"
+while [[ "$check_dir" != "/" ]]; do
+    if [[ -d "$check_dir/.git" ]]; then
+        GIT_ROOT="$check_dir"
+        break
+    fi
+    check_dir="$(dirname "$check_dir")"
+done
+
+if [[ -n "$GIT_ROOT" ]]; then
+    cd "$GIT_ROOT"
+    if [[ -n "$(git status --porcelain -- gnome_extensions/ .custom-packages 2>/dev/null)" ]]; then
+        git add gnome_extensions/ .custom-packages 2>/dev/null || true
+        git commit -m "gnome_extensions: update manifest and settings" 2>/dev/null || true
+        ok_changed "Changes committed to $GIT_ROOT"
+    else
+        ok "No changes to commit"
+    fi
+else
+    ok "Custom directory is not a git repo — skipping auto-commit"
+fi
+
+printf '\n'
+info "============================================"
+info "  GNOME extensions manifest updated!"
+info "============================================"
+printf '\n'

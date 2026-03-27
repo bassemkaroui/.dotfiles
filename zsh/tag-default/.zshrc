@@ -209,6 +209,13 @@ function y() {
 }
 # <<< mise-shell-tools
 
+# >>> gh-token (managed by mise run setup:zsh-config — do not edit)
+# GitHub token for API access (e.g., remote-nvim downloads)
+if (( $+commands[gh] )) && gh auth status &>/dev/null; then
+    export GITHUB_TOKEN="$(gh auth token 2>/dev/null)"
+fi
+# <<< gh-token
+
 # GitHub token for API access (e.g., remote-nvim downloads)
 if (( $+commands[gh] )) && gh auth status &>/dev/null; then
     export GITHUB_TOKEN="$(gh auth token 2>/dev/null)"

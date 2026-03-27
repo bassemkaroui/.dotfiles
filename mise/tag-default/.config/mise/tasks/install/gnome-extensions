@@ -1,0 +1,260 @@
+#!/usr/bin/env bash
+#MISE description="Install GNOME Shell extensions from manifest (graphical environment only)"
+#MISE raw=true
+set -eo pipefail
+
+# ─── Helpers ───────────────────────────────────────────────────────────────────
+
+TASK_NAME="install:gnome-ext"
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../lib/helpers.sh"
+
+DOTFILES_DIR="${DOTFILES_DIR:-$HOME/.dotfiles}"
+MANIFEST_FILE="$HOME/.local/share/gnome-extensions/manifest.txt"
+SETTINGS_FILE="$HOME/.local/share/gnome-extensions/extension-settings.dconf"
+
+# ─── Phase 1: Graphical environment check ────────────────────────────────────
+
+info "Phase 1: Detect graphical environment"
+GRAPHICAL_ENV_FILE="$DOTFILES_DIR/.graphical-env"
+HAS_GRAPHICAL=false
+
+# 1. Check .graphical-env pin file (user override)
+if [[ -f "$GRAPHICAL_ENV_FILE" ]]; then
+    GRAPHICAL_PIN="$(<"$GRAPHICAL_ENV_FILE")"
+    case "${GRAPHICAL_PIN,,}" in
+    graphical | yes)
+        HAS_GRAPHICAL=true
+        info "Graphical environment forced via .graphical-env"
+        ;;
+    server | none | no)
+        info "Graphical environment disabled via .graphical-env. Skipping GNOME extensions install."
+        exit 0
+        ;;
+    *)
+        warn "Unknown .graphical-env value '$GRAPHICAL_PIN', falling through to auto-detection"
+        ;;
+    esac
+fi
+
+# 2. Auto-detect graphical environment
+if [[ "$HAS_GRAPHICAL" == false ]]; then
+    if [[ -n "${DISPLAY:-}" ]]; then
+        HAS_GRAPHICAL=true
+        info "Graphical environment detected via \$DISPLAY"
+    elif [[ -n "${WAYLAND_DISPLAY:-}" ]]; then
+        HAS_GRAPHICAL=true
+        info "Graphical environment detected via \$WAYLAND_DISPLAY"
+    elif [[ "${XDG_SESSION_TYPE:-}" == "x11" || "${XDG_SESSION_TYPE:-}" == "wayland" ]]; then
+        HAS_GRAPHICAL=true
+        info "Graphical environment detected via \$XDG_SESSION_TYPE ($XDG_SESSION_TYPE)"
+    else
+        # 3. Fallback: loginctl
+        SESSION_TYPE=""
+        if command -v loginctl &>/dev/null; then
+            SESSION_ID="$(loginctl 2>/dev/null | grep "$(whoami)" | awk '{print $1}' | head -1)"
+            if [[ -n "$SESSION_ID" ]]; then
+                SESSION_TYPE="$(loginctl show-session "$SESSION_ID" -p Type --value 2>/dev/null || true)"
+            fi
+        fi
+        if [[ "$SESSION_TYPE" == "x11" || "$SESSION_TYPE" == "wayland" ]]; then
+            HAS_GRAPHICAL=true
+            info "Graphical environment detected via loginctl ($SESSION_TYPE)"
+        fi
+    fi
+fi
+
+# 4. If nothing detected, prompt user
+if [[ "$HAS_GRAPHICAL" == false ]]; then
+    warn "No graphical environment detected."
+    printf 'Install GNOME extensions anyway? (y/N): '
+    read -r FORCE_INSTALL
+    if [[ ! "${FORCE_INSTALL,,}" =~ ^y ]]; then
+        info "Skipping GNOME extensions install."
+        exit 0
+    fi
+    HAS_GRAPHICAL=true
+
+    # Offer to persist the decision
+    printf 'Persist this choice? [g]raphical / [s]erver / Enter to skip: '
+    read -r PERSIST_CHOICE
+    case "${PERSIST_CHOICE,,}" in
+    g | graphical)
+        printf 'graphical' >"$GRAPHICAL_ENV_FILE"
+        info "Saved .graphical-env = graphical"
+        ;;
+    s | server)
+        printf 'server' >"$GRAPHICAL_ENV_FILE"
+        info "Saved .graphical-env = server (GNOME extensions will be skipped in future runs)"
+        exit 0
+        ;;
+    esac
+fi
+
+ok "Graphical environment confirmed"
+
+# ─── Phase 2: Install prerequisites ──────────────────────────────────────────
+
+info "Phase 2: Check prerequisites"
+
+# Verify GNOME Shell is available
+if ! command -v gnome-shell &>/dev/null; then
+    warn "gnome-shell not found — this does not appear to be a GNOME desktop. Skipping."
+    exit 0
+fi
+
+SHELL_VERSION="$(gnome-shell --version 2>/dev/null | sed -E 's/[^0-9]*([0-9]+).*/\1/')"
+if [[ -z "$SHELL_VERSION" ]]; then
+    fail "Could not determine GNOME Shell version"
+fi
+ok "GNOME Shell major version: $SHELL_VERSION"
+
+# Verify gnome-extensions CLI
+if ! command -v gnome-extensions &>/dev/null; then
+    fail "gnome-extensions CLI not found. Install gnome-shell first."
+fi
+
+# Install required CLI tools via nala/apt
+# Map: "binary:package" — check binary first, fall back to dpkg for the package name
+REQUIRED_TOOLS=("dconf:dconf-cli" "curl:curl" "jq:jq")
+missing=()
+for entry in "${REQUIRED_TOOLS[@]}"; do
+    bin="${entry%%:*}"
+    pkg="${entry##*:}"
+    if ! command -v "$bin" &>/dev/null && ! dpkg -s "$pkg" &>/dev/null 2>&1; then
+        missing+=("$pkg")
+    fi
+done
+
+if [[ ${#missing[@]} -gt 0 ]]; then
+    info "Installing missing packages: ${missing[*]}"
+    if command -v sudo &>/dev/null; then
+        if command -v nala &>/dev/null; then
+            sudo nala install -y "${missing[@]}" || sudo apt-get install -y "${missing[@]}" || fail "Failed to install: ${missing[*]}"
+        else
+            sudo apt-get install -y "${missing[@]}" || fail "Failed to install: ${missing[*]}"
+        fi
+        ok_changed "Installed: ${missing[*]}"
+    else
+        fail "sudo not available — cannot install: ${missing[*]}"
+    fi
+else
+    ok "All prerequisites installed"
+fi
+
+# Verify manifest file
+if [[ ! -f "$MANIFEST_FILE" ]]; then
+    warn "Manifest file not found at $MANIFEST_FILE"
+    warn "Deploy the gnome_extensions custom package first (mise run setup:dotfiles)"
+    exit 0
+fi
+ok "Manifest found: $MANIFEST_FILE"
+
+# ─── Phase 3: Install missing extensions (idempotent) ────────────────────────
+
+info "Phase 3: Install GNOME extensions"
+TMPDIR_EXT="$(mktemp -d)"
+trap 'rm -rf "$TMPDIR_EXT"' EXIT
+
+INSTALLED_COUNT=0
+SKIPPED_COUNT=0
+FAILED_COUNT=0
+
+while IFS= read -r uuid; do
+    # Skip empty lines and comments
+    [[ -z "$uuid" || "$uuid" == \#* ]] && continue
+
+    # Check if already installed
+    if gnome-extensions info "$uuid" &>/dev/null; then
+        ok "  $uuid (already installed)"
+        ((SKIPPED_COUNT++)) || true
+        continue
+    fi
+
+    info "  Installing $uuid ..."
+
+    # Query extensions.gnome.org API for download URL
+    API_RESPONSE="$(curl -fsSL "https://extensions.gnome.org/extension-info/?uuid=$uuid&shell_version=$SHELL_VERSION" 2>/dev/null || true)"
+
+    if [[ -z "$API_RESPONSE" ]]; then
+        warn "  $uuid: could not fetch info from extensions.gnome.org (skipped)"
+        ((FAILED_COUNT++)) || true
+        continue
+    fi
+
+    DOWNLOAD_URL="$(echo "$API_RESPONSE" | jq -r '.download_url // empty' 2>/dev/null)"
+    if [[ -z "$DOWNLOAD_URL" ]]; then
+        warn "  $uuid: no compatible version for GNOME Shell $SHELL_VERSION (skipped)"
+        ((FAILED_COUNT++)) || true
+        continue
+    fi
+
+    # Download the extension zip
+    ZIP_FILE="$TMPDIR_EXT/${uuid}.zip"
+    if ! curl -fsSL -o "$ZIP_FILE" "https://extensions.gnome.org${DOWNLOAD_URL}"; then
+        warn "  $uuid: download failed (skipped)"
+        ((FAILED_COUNT++)) || true
+        continue
+    fi
+
+    # Install the extension
+    if gnome-extensions install --force "$ZIP_FILE"; then
+        ok_changed "  $uuid (installed)"
+        ((INSTALLED_COUNT++)) || true
+    else
+        warn "  $uuid: gnome-extensions install failed (skipped)"
+        ((FAILED_COUNT++)) || true
+    fi
+done <"$MANIFEST_FILE"
+
+# ─── Phase 4: Restore dconf settings ─────────────────────────────────────────
+
+info "Phase 4: Restore extension settings"
+
+if [[ -f "$SETTINGS_FILE" ]]; then
+    dconf load /org/gnome/shell/extensions/ <"$SETTINGS_FILE"
+    ok_changed "Extension settings restored from $SETTINGS_FILE"
+else
+    warn "Settings file not found at $SETTINGS_FILE — skipping settings restore"
+fi
+
+# ─── Phase 5: Enable extensions ──────────────────────────────────────────────
+
+info "Phase 5: Enable extensions"
+ENABLED_COUNT=0
+
+while IFS= read -r uuid; do
+    [[ -z "$uuid" || "$uuid" == \#* ]] && continue
+
+    # Check if extension is installed (might have failed in phase 3)
+    if ! gnome-extensions info "$uuid" &>/dev/null; then
+        continue
+    fi
+
+    # Check if already enabled
+    STATE="$(gnome-extensions info "$uuid" 2>/dev/null | grep -oP '(?<=State: ).*' || true)"
+    if [[ "$STATE" == "ENABLED" || "$STATE" == "ACTIVE" ]]; then
+        continue
+    fi
+
+    if gnome-extensions enable "$uuid" 2>/dev/null; then
+        ok_changed "  Enabled $uuid"
+        ((ENABLED_COUNT++)) || true
+    fi
+done <"$MANIFEST_FILE"
+
+if ((ENABLED_COUNT == 0)); then
+    ok "All extensions already enabled"
+fi
+
+# ─── Phase 6: Summary ────────────────────────────────────────────────────────
+
+printf '\n'
+info "============================================"
+info "  GNOME Extensions install complete!"
+info "  Installed: $INSTALLED_COUNT  Skipped: $SKIPPED_COUNT  Failed: $FAILED_COUNT"
+if ((INSTALLED_COUNT > 0)); then
+    info "  Note: you may need to restart GNOME Shell"
+    info "  (Alt+F2 → r, or log out/in)"
+fi
+info "============================================"
+printf '\n'

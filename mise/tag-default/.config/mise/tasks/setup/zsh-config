@@ -168,12 +168,18 @@ fi
 # <<< gh-token'
 
     # Insert after mise-shell-tools block if present, otherwise after mise-setup block
+    INSERT_AFTER=""
     if grep -q '# <<< mise-shell-tools' "$ZSHRC" 2>/dev/null; then
-        sed -i "/# <<< mise-shell-tools/a\\\\n${GH_TOKEN_BLOCK}" "$ZSHRC"
-        ok_changed "Added GitHub token block after mise-shell-tools"
+        INSERT_AFTER='# <<< mise-shell-tools'
     elif grep -q '# <<< mise-setup' "$ZSHRC" 2>/dev/null; then
-        sed -i "/# <<< mise-setup/a\\\\n${GH_TOKEN_BLOCK}" "$ZSHRC"
-        ok_changed "Added GitHub token block after mise-setup"
+        INSERT_AFTER='# <<< mise-setup'
+    fi
+
+    if [[ -n "$INSERT_AFTER" ]]; then
+        LINE_NUM="$(grep -n "$INSERT_AFTER" "$ZSHRC" | tail -1 | cut -d: -f1)"
+        { head -n "$LINE_NUM" "$ZSHRC"; printf '\n%s\n' "$GH_TOKEN_BLOCK"; tail -n +"$((LINE_NUM + 1))" "$ZSHRC"; } > "$ZSHRC.tmp"
+        mv "$ZSHRC.tmp" "$ZSHRC"
+        ok_changed "Added GitHub token block after $INSERT_AFTER"
     else
         printf '\n%s\n' "$GH_TOKEN_BLOCK" >> "$ZSHRC"
         ok_changed "Added GitHub token block to end of .zshrc"
