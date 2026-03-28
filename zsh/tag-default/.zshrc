@@ -122,7 +122,7 @@ ZSH_THEME="powerlevel10k/powerlevel10k"
 # Example format: plugins=(rails git textmate ruby lighthouse)
 # Add wisely, as too many plugins slow down shell startup.
 #plugins=(git)
-plugins=(git fzf-tab zsh-autosuggestions zsh-syntax-highlighting sudo command-not-found poetry aws)
+plugins=(git fzf-tab zsh-autosuggestions zsh-syntax-highlighting sudo command-not-found aws)
 source $ZSH/oh-my-zsh.sh
 
 # >>> mise-shell-tools (managed by mise run setup:shell-tools — do not edit)
