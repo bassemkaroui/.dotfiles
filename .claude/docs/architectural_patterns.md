@@ -118,6 +118,58 @@ After resolution, the tag is persisted to `.dotfiles/.device-tag` (git-ignored).
 
 ---
 
+## Desktop Environment Detection
+
+**Pattern:** DE-specific packages (e.g., GNOME themes, GNOME extensions) are conditionally deployed based on the detected desktop environment. This is separate from the graphical environment check — a system can be graphical but running COSMIC instead of GNOME.
+
+**Detection checks (in order):**
+1. `.desktop-env` pin file (gitignored) — `gnome`, `cosmic`, or `unknown`
+2. `$XDG_CURRENT_DESKTOP` environment variable (case-insensitive, handles colon-separated values like `pop:GNOME`)
+3. Binary/directory presence fallback — `gnome-shell` binary → GNOME; `~/.config/cosmic/` directory → COSMIC
+
+**Helper functions** (in `helpers.sh`):
+- `detect_desktop_env()` — Sets `DESKTOP_ENV` global (cached after first call)
+- `is_gnome()` / `is_cosmic()` — Convenience wrappers returning 0/1
+
+**How it affects deployment:**
+- `setup:dotfiles` auto-excludes `gnome_themes` when not on GNOME (separate from `.stow-exclude`, which is user-managed)
+- `install:gnome-extensions` and `update:gnome-extensions` skip when not on GNOME
+- Auto-excluded packages are also unstowed if previously deployed (e.g., after switching from GNOME to COSMIC)
+
+**When applying:** Use `is_gnome()` / `is_cosmic()` guards for any DE-specific tool or config. To add a future COSMIC-only package, add a `! is_cosmic` check in `setup:dotfiles` following the same pattern as `gnome_themes`.
+
+---
+
+## COSMIC Theme Setup
+
+**Pattern:** Interactive theme selection and application for the COSMIC desktop environment, downloading themes from the community hub at cosmic-themes.org.
+
+**Task:** `setup:cosmic-theme` — runs during bootstrap (after `install:gnome-extensions`), guarded by `is_cosmic()`.
+
+**Flow:**
+1. Detect COSMIC desktop (skips silently on GNOME/other DEs)
+2. Present interactive menu with predefined themes + custom search option
+3. Query `cosmic-themes.org/api/themes?search=<name>` API (returns JSON with `.ron` content)
+4. For custom searches with no exact match, show fuzzy results for user to pick
+5. Save `.ron` file to `~/.local/share/cosmic-themes/` cache
+6. Parse `.ron` via Python helper (`lib/cosmic_theme_helper.py`) which extracts top-level fields
+7. Write each field to `~/.config/cosmic/com.system76.CosmicTheme.{Dark|Light}.Builder/v1/<field>`
+8. If `cosmic-ctl` is available, run `build-theme` for immediate application
+
+**Key files:**
+- `mise/tag-default/.config/mise/tasks/setup/cosmic-theme` — interactive task
+- `mise/tag-default/.config/mise/tasks/lib/cosmic_theme_helper.py` — RON parser and config writer
+
+**COSMIC theme config architecture:**
+- Themes use `.ron` (Rusty Object Notation) files
+- Config stored per-field at `~/.config/cosmic/com.system76.CosmicTheme.{Dark|Light}.Builder/v1/`
+- Component IDs: `com.system76.CosmicTheme.Dark.Builder`, `com.system76.CosmicTheme.Light.Builder`
+- `cosmic-ctl build-theme` compiles the builder config into the active theme
+
+**When applying:** Always prompt the user — this task is designed to run interactively on every bootstrap. Users can skip to keep their current theme.
+
+---
+
 ## Custom Packages Extension
 
 **Pattern:** Users can add their own config packages in a sibling directory (`~/.dotfiles-custom/`), tracked via an INI-style `.custom-packages` file with `[name:tag]` composite section headers. Custom packages are tag-aware and integrate with the existing stow deployment pipeline but live entirely outside the main dotfiles repo.

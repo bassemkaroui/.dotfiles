@@ -96,9 +96,9 @@ ok "Graphical environment confirmed"
 
 info "Phase 2: Check prerequisites"
 
-# Verify GNOME Shell is available
-if ! command -v gnome-shell &>/dev/null; then
-    warn "gnome-shell not found — this does not appear to be a GNOME desktop. Skipping."
+# Verify this is a GNOME desktop
+if ! is_gnome; then
+    info "Desktop environment is '${DESKTOP_ENV:-unknown}' (not GNOME). Skipping GNOME extensions."
     exit 0
 fi
 

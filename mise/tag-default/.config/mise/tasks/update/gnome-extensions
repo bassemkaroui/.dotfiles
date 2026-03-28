@@ -50,6 +50,11 @@ ok "Graphical environment confirmed"
 
 info "Phase 2: Check prerequisites"
 
+if ! is_gnome; then
+    info "Desktop environment is '${DESKTOP_ENV:-unknown}' (not GNOME). Skipping."
+    exit 0
+fi
+
 if ! command -v gnome-extensions &>/dev/null; then
     fail "gnome-extensions CLI not found"
 fi

@@ -235,6 +235,23 @@ for pkg in "${ALL_DEFAULT_PACKAGES[@]}"; do
     in_array "$pkg" "${EXCLUDED[@]}" || PACKAGES+=("$pkg")
 done
 
+# Auto-exclude DE-specific packages based on detected desktop environment
+detect_desktop_env
+DE_AUTO_EXCLUDED=()
+if ! is_gnome; then
+    for pkg in "${PACKAGES[@]}"; do
+        [[ "$pkg" == "gnome_themes" ]] && DE_AUTO_EXCLUDED+=("$pkg")
+    done
+    if ((${#DE_AUTO_EXCLUDED[@]} > 0)); then
+        FILTERED=()
+        for pkg in "${PACKAGES[@]}"; do
+            in_array "$pkg" "${DE_AUTO_EXCLUDED[@]}" || FILTERED+=("$pkg")
+        done
+        PACKAGES=("${FILTERED[@]}")
+        ok "Auto-excluded (DE=$DESKTOP_ENV): ${DE_AUTO_EXCLUDED[*]}"
+    fi
+fi
+
 ALL_PKG_DIRS=()
 for pkg in "${PACKAGES[@]}"; do
     resolve_tag_dir "$DOTFILES_DIR/$pkg" "$DEVICE_TAG"
@@ -257,6 +274,13 @@ compute_shared_dirs "${ALL_PKG_DIRS[@]}"
 if ((${#EXCLUDED[@]} > 0)); then
     info "Unstowing excluded packages: ${EXCLUDED[*]}"
     for pkg in "${EXCLUDED[@]}"; do
+        unstow_package "$pkg"
+    done
+fi
+
+if ((${#DE_AUTO_EXCLUDED[@]} > 0)); then
+    info "Unstowing DE-excluded packages: ${DE_AUTO_EXCLUDED[*]}"
+    for pkg in "${DE_AUTO_EXCLUDED[@]}"; do
         unstow_package "$pkg"
     done
 fi

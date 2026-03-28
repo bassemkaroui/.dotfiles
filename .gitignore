@@ -3,6 +3,7 @@
 *.backup1
 .device-tag
 .graphical-env
+.desktop-env
 .stow-exclude
 zsh/tag-default/.config/completions/_*
 gpg/tag-default/.gnupg/*

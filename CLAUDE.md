@@ -67,6 +67,7 @@ stow -d ssh -t ~ tag-laptop                # Deploy a device-specific variant
 | Deploy/redeploy configs | `mise run setup:dotfiles`        |
 | Update tmux             | `mise run update:oh-my-tmux`     |
 | Update GNOME ext manifest | `mise run update:gnome-extensions` |
+| Set COSMIC theme        | `mise run setup:cosmic-theme`    |
 | Install/update tools    | `mise run install:*`             |
 | Verify stow conflicts   | `stow -nv -t ~ <package>`        |
 
@@ -75,6 +76,7 @@ stow -d ssh -t ~ tag-laptop                # Deploy a device-specific variant
 - **Modular via Stow:** Each tool in its own package; deploy selectively
 - **Uniform tag layout:** All packages use `tag-*` subdirectories (e.g., `bash/tag-default/`, `ssh/tag-laptop/`). Deployed based on `.device-tag` with fallback to `tag-default/`
 - **Graphical detection:** Ghostty and GNOME extensions installation checks for graphical environment (`$DISPLAY`, `$WAYLAND_DISPLAY`, etc.) instead of device type. Override via `.graphical-env`
+- **Desktop environment detection:** DE-specific packages (GNOME themes, extensions) are auto-excluded when not on the matching DE. Detection via `.desktop-env` override → `$XDG_CURRENT_DESKTOP` → binary/directory fallback. Helpers: `is_gnome()`, `is_cosmic()` in `helpers.sh`
 - **Per-machine exclusions:** `.stow-exclude` (gitignored) lists packages to skip on a specific machine; managed interactively by `setup:dotfiles`
 - **Custom packages:** Users can add their own config packages in a sibling directory (`~/.dotfiles-custom/`) via `setup:custom-dotfiles`. Tracked in `.custom-packages` (INI-style with `[name:tag]` sections). Custom packages are tag-aware and immune to `.stow-exclude`. See [CUSTOM-PACKAGES.md](CUSTOM-PACKAGES.md)
 - **XDG compliance:** Configs use `~/.config/` for tool-specific settings

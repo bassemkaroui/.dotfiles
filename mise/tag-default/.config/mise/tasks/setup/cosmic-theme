@@ -1,0 +1,205 @@
+#!/usr/bin/env bash
+#MISE description="Set up a COSMIC desktop theme (interactive, COSMIC only)"
+#MISE raw=true
+set -eo pipefail
+
+# ─── Helpers ───────────────────────────────────────────────────────────────────
+
+TASK_NAME="setup:cosmic-theme"
+LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../lib"
+source "$LIB_DIR/helpers.sh"
+
+HELPER="$LIB_DIR/cosmic_theme_helper.py"
+THEMES_CACHE_DIR="$HOME/.local/share/cosmic-themes"
+
+# Predefined theme choices
+PREDEFINED_THEMES=(
+    "Catppuccin Macchiato Lavender"
+    "Catppuccin Mocha Sky"
+    "Catppuccin Macchiato Green"
+    "Catppuccin Frappé Flamingo"
+    "Tokyonight"
+)
+
+# ─── Phase 1: Environment checks ──────────────────────────────────────────────
+
+info "Phase 1: Environment checks"
+
+if ! is_cosmic; then
+    info "Desktop environment is '${DESKTOP_ENV:-unknown}' (not COSMIC). Skipping."
+    exit 0
+fi
+ok "COSMIC desktop detected"
+
+for tool in curl python3; do
+    command -v "$tool" &>/dev/null || fail "$tool is required but not found"
+done
+ok "Prerequisites available"
+
+mkdir -p "$THEMES_CACHE_DIR"
+
+# ─── Phase 2: Theme selection ─────────────────────────────────────────────────
+
+info "Phase 2: Select a theme"
+printf '\n'
+printf '  Available COSMIC themes:\n'
+printf '\n'
+
+for i in "${!PREDEFINED_THEMES[@]}"; do
+    printf '    %d) %s\n' "$((i + 1))" "${PREDEFINED_THEMES[$i]}"
+done
+CUSTOM_NUM=$((${#PREDEFINED_THEMES[@]} + 1))
+printf '    %d) Search for a different theme on cosmic-themes.org\n' "$CUSTOM_NUM"
+SKIP_NUM=$((CUSTOM_NUM + 1))
+printf '    %d) Skip (keep current theme)\n' "$SKIP_NUM"
+printf '\n'
+
+printf '  Choose a theme [1-%d]: ' "$SKIP_NUM"
+read -r CHOICE
+
+if [[ -z "$CHOICE" ]] || ! [[ "$CHOICE" =~ ^[0-9]+$ ]]; then
+    info "No selection made. Skipping."
+    exit 0
+fi
+
+if ((CHOICE == SKIP_NUM)); then
+    info "Keeping current theme."
+    exit 0
+fi
+
+THEME_NAME=""
+
+if ((CHOICE >= 1 && CHOICE <= ${#PREDEFINED_THEMES[@]})); then
+    THEME_NAME="${PREDEFINED_THEMES[$((CHOICE - 1))]}"
+elif ((CHOICE == CUSTOM_NUM)); then
+    printf '  Enter theme name to search: '
+    read -r THEME_NAME
+    if [[ -z "$THEME_NAME" ]]; then
+        info "No theme name entered. Skipping."
+        exit 0
+    fi
+else
+    warn "Invalid choice. Skipping."
+    exit 0
+fi
+
+ok "Selected: $THEME_NAME"
+
+# ─── Phase 3: Download theme ──────────────────────────────────────────────────
+
+info "Phase 3: Download theme from cosmic-themes.org"
+
+SAFE_FILENAME="$(echo "$THEME_NAME" | tr ' ' '_' | tr -cd '[:alnum:]_-')"
+RON_FILE="$THEMES_CACHE_DIR/${SAFE_FILENAME}.ron"
+
+# Check cache first
+if [[ -f "$RON_FILE" ]]; then
+    ok "Using cached theme: $RON_FILE"
+    MATCHED_NAME="$THEME_NAME"
+    DOWNLOAD_EXIT=-1  # sentinel: skip download logic
+else
+    # Try exact-match download
+    DOWNLOAD_OUTPUT="$(python3 "$HELPER" download "$THEME_NAME" "$RON_FILE" 2>&1)"
+    DOWNLOAD_EXIT=$?
+fi
+
+if ((DOWNLOAD_EXIT == -1)); then
+    : # cached, nothing to do
+
+elif ((DOWNLOAD_EXIT == 0)); then
+    # Exact match found and downloaded
+    MATCHED_NAME="$(echo "$DOWNLOAD_OUTPUT" | grep '^NAME=' | cut -d= -f2-)"
+    DOWNLOADS="$(echo "$DOWNLOAD_OUTPUT" | grep '^DOWNLOADS=' | cut -d= -f2-)"
+    ok "Downloaded: $MATCHED_NAME ($DOWNLOADS downloads)"
+
+elif ((DOWNLOAD_EXIT == 2)); then
+    # No exact match — DOWNLOAD_OUTPUT contains available themes (name|downloads per line)
+    info "No exact match for '$THEME_NAME'. Similar themes found:"
+    printf '\n'
+
+    NAMES=()
+    DCOUNTS=()
+    while IFS='|' read -r name dcount; do
+        [[ -z "$name" ]] && continue
+        NAMES+=("$name")
+        DCOUNTS+=("$dcount")
+    done <<<"$DOWNLOAD_OUTPUT"
+
+    if ((${#NAMES[@]} == 0)); then
+        fail "No themes found matching '$THEME_NAME'"
+    fi
+
+    for i in "${!NAMES[@]}"; do
+        printf '    %d) %s (%s downloads)\n' "$((i + 1))" "${NAMES[$i]}" "${DCOUNTS[$i]}"
+    done
+    printf '    %d) Cancel\n' "$((${#NAMES[@]} + 1))"
+    printf '\n'
+    printf '  Pick a theme [1-%d]: ' "$((${#NAMES[@]} + 1))"
+    read -r PICK
+
+    if [[ -z "$PICK" ]] || ! [[ "$PICK" =~ ^[0-9]+$ ]] || ((PICK < 1 || PICK > ${#NAMES[@]})); then
+        info "Cancelled."
+        exit 0
+    fi
+
+    PICK_NAME="${NAMES[$((PICK - 1))]}"
+    SAFE_FILENAME="$(echo "$PICK_NAME" | tr ' ' '_' | tr -cd '[:alnum:]_-')"
+    RON_FILE="$THEMES_CACHE_DIR/${SAFE_FILENAME}.ron"
+
+    if [[ -f "$RON_FILE" ]]; then
+        ok "Using cached theme: $RON_FILE"
+        MATCHED_NAME="$PICK_NAME"
+    else
+        # Download the picked theme (should be an exact match now)
+        DOWNLOAD_OUTPUT="$(python3 "$HELPER" download "$PICK_NAME" "$RON_FILE" 2>&1)"
+        if (($? != 0)); then
+            fail "Failed to download '$PICK_NAME'"
+        fi
+
+        MATCHED_NAME="$(echo "$DOWNLOAD_OUTPUT" | grep '^NAME=' | cut -d= -f2-)"
+        DOWNLOADS="$(echo "$DOWNLOAD_OUTPUT" | grep '^DOWNLOADS=' | cut -d= -f2-)"
+        ok "Downloaded: $MATCHED_NAME ($DOWNLOADS downloads)"
+    fi
+else
+    fail "Failed to search cosmic-themes.org: $DOWNLOAD_OUTPUT"
+fi
+
+ok "Saved to $RON_FILE"
+
+# ─── Phase 4: Apply theme ─────────────────────────────────────────────────────
+
+info "Phase 4: Apply theme"
+
+APPLY_OUTPUT="$(python3 "$HELPER" apply "$RON_FILE" 2>&1)"
+if (($? != 0)); then
+    fail "Failed to apply theme: $APPLY_OUTPUT"
+fi
+
+VARIANT="$(echo "$APPLY_OUTPUT" | grep '^VARIANT=' | cut -d= -f2)"
+CONFIG_DIR="$(echo "$APPLY_OUTPUT" | grep '^CONFIG_DIR=' | cut -d= -f2)"
+ENTRIES_WRITTEN="$(echo "$APPLY_OUTPUT" | grep '^ENTRIES_WRITTEN=' | cut -d= -f2)"
+
+ok_changed "Wrote $ENTRIES_WRITTEN config entries to $CONFIG_DIR"
+ok "Theme variant: $VARIANT"
+
+# Build theme if cosmic-ctl is available
+if command -v cosmic-ctl &>/dev/null; then
+    info "Building theme via cosmic-ctl..."
+    if cosmic-ctl build-theme 2>/dev/null; then
+        ok_changed "Theme built and applied"
+    else
+        warn "cosmic-ctl build-theme failed — theme may apply on next login"
+    fi
+else
+    info "cosmic-ctl not found — theme will apply on next login or restart"
+    info "  Install for immediate application: cargo install cosmic-ctl"
+fi
+
+# ─── Done ──────────────────────────────────────────────────────────────────────
+
+printf '\n'
+info "============================================"
+info "  COSMIC theme setup complete!"
+info "  Theme: $MATCHED_NAME ($VARIANT)"
+info "============================================"
+printf '\n'

@@ -19,6 +19,7 @@ DOTFILES_DIR="$HOME/.dotfiles"
 CUSTOM_DIR="${DOTFILES_CUSTOM_DIR:-$HOME/.dotfiles-custom}"
 DEVICE_TAG_FILE="$DOTFILES_DIR/.device-tag"
 STOW_EXCLUDE_FILE="$DOTFILES_DIR/.stow-exclude"
+DESKTOP_ENV_FILE="$DOTFILES_DIR/.desktop-env"
 CUSTOM_FILE="$CUSTOM_DIR/.custom-packages"
 
 # Canonical list of default stow packages (shared across tasks)
@@ -59,6 +60,52 @@ write_exclusions() {
     done
     mv "$tmpfile" "$STOW_EXCLUDE_FILE"
 }
+
+# ─── Desktop environment detection ──────────────────────────────────────────
+
+# Detect running desktop environment. Sets DESKTOP_ENV to: gnome, cosmic, or unknown.
+# Checks .desktop-env override first, then XDG_CURRENT_DESKTOP, then binary presence.
+detect_desktop_env() {
+    [[ -n "${DESKTOP_ENV:-}" ]] && return 0 # already detected (cached)
+
+    # 1. Override file
+    if [[ -f "$DESKTOP_ENV_FILE" ]]; then
+        DESKTOP_ENV="$(<"$DESKTOP_ENV_FILE")"
+        DESKTOP_ENV="${DESKTOP_ENV,,}"  # lowercase
+        DESKTOP_ENV="${DESKTOP_ENV// /}" # strip spaces
+        if [[ "$DESKTOP_ENV" =~ ^(gnome|cosmic|unknown)$ ]]; then
+            return 0
+        fi
+        warn "Invalid .desktop-env value '$DESKTOP_ENV', falling back to auto-detect"
+        DESKTOP_ENV=""
+    fi
+
+    # 2. XDG_CURRENT_DESKTOP (colon-separated, case-insensitive)
+    if [[ -n "${XDG_CURRENT_DESKTOP:-}" ]]; then
+        local xdg_lower="${XDG_CURRENT_DESKTOP,,}"
+        if [[ "$xdg_lower" == *"gnome"* ]]; then
+            DESKTOP_ENV="gnome"
+            return 0
+        elif [[ "$xdg_lower" == *"cosmic"* ]]; then
+            DESKTOP_ENV="cosmic"
+            return 0
+        fi
+    fi
+
+    # 3. Binary/directory presence fallback (for SSH sessions, etc.)
+    if command -v gnome-shell &>/dev/null; then
+        DESKTOP_ENV="gnome"
+        return 0
+    elif [[ -d "$HOME/.config/cosmic" ]]; then
+        DESKTOP_ENV="cosmic"
+        return 0
+    fi
+
+    DESKTOP_ENV="unknown"
+}
+
+is_gnome() { detect_desktop_env; [[ "$DESKTOP_ENV" == "gnome" ]]; }
+is_cosmic() { detect_desktop_env; [[ "$DESKTOP_ENV" == "cosmic" ]]; }
 
 # Find next available .bak suffix: .bak, .bak.1, .bak.2, ...
 next_backup_path() {
