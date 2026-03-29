@@ -68,6 +68,7 @@ stow -d ssh -t ~ tag-laptop                # Deploy a device-specific variant
 | Update tmux             | `mise run update:oh-my-tmux`     |
 | Update GNOME ext manifest | `mise run update:gnome-extensions` |
 | Set COSMIC theme        | `mise run setup:cosmic-theme`    |
+| Delete cached themes    | `mise run setup:cosmic-theme-clean` |
 | Install/update tools    | `mise run install:*`             |
 | Verify stow conflicts   | `stow -nv -t ~ <package>`        |
 

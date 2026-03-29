@@ -1,0 +1,104 @@
+#!/usr/bin/env bash
+#MISE description="Delete cached COSMIC themes (interactive, COSMIC only)"
+#MISE raw=true
+set -eo pipefail
+
+# ─── Helpers ───────────────────────────────────────────────────────────────────
+
+TASK_NAME="setup:cosmic-theme-clean"
+LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../lib"
+source "$LIB_DIR/helpers.sh"
+
+THEMES_CACHE_DIR="$HOME/.local/share/cosmic-themes"
+
+# ─── Phase 1: Environment checks ──────────────────────────────────────────────
+
+info "Phase 1: Environment checks"
+
+if ! is_cosmic; then
+    info "Desktop environment is '${DESKTOP_ENV:-unknown}' (not COSMIC). Skipping."
+    exit 0
+fi
+ok "COSMIC desktop detected"
+
+# ─── Phase 2: List cached themes ──────────────────────────────────────────────
+
+info "Phase 2: Select themes to delete"
+
+if ! compgen -G "$THEMES_CACHE_DIR/*.ron" >/dev/null 2>&1; then
+    info "No cached themes found in $THEMES_CACHE_DIR"
+    exit 0
+fi
+
+RON_FILES=()
+DISPLAY_NAMES=()
+while IFS= read -r ron_file; do
+    RON_FILES+=("$ron_file")
+    base="$(basename "$ron_file" .ron)"
+    DISPLAY_NAMES+=("$(echo "$base" | tr '_' ' ')")
+done < <(ls -1 "$THEMES_CACHE_DIR"/*.ron | sort)
+
+if ((${#RON_FILES[@]} == 0)); then
+    info "No cached themes found."
+    exit 0
+fi
+
+printf '\n'
+printf '  Cached COSMIC themes:\n'
+printf '\n'
+
+for i in "${!DISPLAY_NAMES[@]}"; do
+    printf '    %d) %s\n' "$((i + 1))" "${DISPLAY_NAMES[$i]}"
+done
+printf '\n'
+printf '  Enter theme numbers to delete (space-separated), "all", or "cancel":\n'
+printf '  > '
+read -r INPUT
+
+if [[ -z "$INPUT" || "${INPUT,,}" == "cancel" ]]; then
+    info "Cancelled."
+    exit 0
+fi
+
+# ─── Phase 3: Delete selected themes ──────────────────────────────────────────
+
+info "Phase 3: Delete themes"
+
+INDICES=()
+if [[ "${INPUT,,}" == "all" ]]; then
+    for i in "${!RON_FILES[@]}"; do
+        INDICES+=("$i")
+    done
+else
+    for num in $INPUT; do
+        if ! [[ "$num" =~ ^[0-9]+$ ]] || ((num < 1 || num > ${#RON_FILES[@]})); then
+            warn "Invalid number: $num (skipping)"
+            continue
+        fi
+        INDICES+=("$((num - 1))")
+    done
+fi
+
+if ((${#INDICES[@]} == 0)); then
+    info "Nothing to delete."
+    exit 0
+fi
+
+DELETED=0
+for idx in "${INDICES[@]}"; do
+    file="${RON_FILES[$idx]}"
+    name="${DISPLAY_NAMES[$idx]}"
+    if [[ -f "$file" ]]; then
+        rm "$file"
+        ok_changed "Deleted: $name"
+        DELETED=$((DELETED + 1))
+    fi
+done
+
+# ─── Done ──────────────────────────────────────────────────────────────────────
+
+printf '\n'
+info "============================================"
+info "  Deleted $DELETED cached theme(s)"
+info "============================================"
+printf '\n'

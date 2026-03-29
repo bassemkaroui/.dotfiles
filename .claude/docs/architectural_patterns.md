@@ -152,19 +152,15 @@ After resolution, the tag is persisted to `.dotfiles/.device-tag` (git-ignored).
 3. Query `cosmic-themes.org/api/themes?search=<name>` API (returns JSON with `.ron` content)
 4. For custom searches with no exact match, show fuzzy results for user to pick
 5. Save `.ron` file to `~/.local/share/cosmic-themes/` cache
-6. Parse `.ron` via Python helper (`lib/cosmic_theme_helper.py`) which extracts top-level fields
-7. Write each field to `~/.config/cosmic/com.system76.CosmicTheme.{Dark|Light}.Builder/v1/<field>`
-8. If `cosmic-ctl` is available, run `build-theme` for immediate application
+6. Apply theme via `cosmic-settings appearance import <ron_file>` for immediate effect
 
 **Key files:**
 - `mise/tag-default/.config/mise/tasks/setup/cosmic-theme` — interactive task
-- `mise/tag-default/.config/mise/tasks/lib/cosmic_theme_helper.py` — RON parser and config writer
+- `mise/tag-default/.config/mise/tasks/lib/cosmic_theme_helper.py` — API search and download helper
 
 **COSMIC theme config architecture:**
 - Themes use `.ron` (Rusty Object Notation) files
-- Config stored per-field at `~/.config/cosmic/com.system76.CosmicTheme.{Dark|Light}.Builder/v1/`
-- Component IDs: `com.system76.CosmicTheme.Dark.Builder`, `com.system76.CosmicTheme.Light.Builder`
-- `cosmic-ctl build-theme` compiles the builder config into the active theme
+- `cosmic-settings appearance import` handles parsing, writing config entries, and live-reloading the theme (same mechanism the Settings GUI uses)
 
 **When applying:** Always prompt the user — this task is designed to run interactively on every bootstrap. Users can skip to keep their current theme.
 
