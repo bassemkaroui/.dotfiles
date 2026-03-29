@@ -140,29 +140,35 @@ After resolution, the tag is persisted to `.dotfiles/.device-tag` (git-ignored).
 
 ---
 
-## COSMIC Theme Setup
+## COSMIC Desktop Setup
 
-**Pattern:** Interactive theme selection and application for the COSMIC desktop environment, downloading themes from the community hub at cosmic-themes.org.
+**Pattern:** Umbrella task for all COSMIC-specific setup: prerequisites first, then interactive theme configuration.
 
-**Task:** `setup:cosmic-theme` — runs during bootstrap (after `install:gnome-extensions`), guarded by `is_cosmic()`.
+**Task:** `setup:cosmic` — runs during bootstrap (after `install:gnome-extensions`), guarded by `is_cosmic()`. Delegates to `setup:cosmic-theme` after prerequisites are satisfied.
 
 **Flow:**
 1. Detect COSMIC desktop (skips silently on GNOME/other DEs)
-2. Present interactive menu with predefined themes + custom search option
-3. Query `cosmic-themes.org/api/themes?search=<name>` API (returns JSON with `.ron` content)
-4. For custom searches with no exact match, show fuzzy results for user to pick
-5. Save `.ron` file to `~/.local/share/cosmic-themes/` cache
-6. Apply theme via `cosmic-settings appearance import <ron_file>` for immediate effect
+2. **Prerequisites:** install `ddcutil` (external monitor brightness control), configure i2c udev rule, add user to `i2c` group, reload udev
+3. **Theme setup:** delegates to `setup:cosmic-theme`
+
+**Theme task (`setup:cosmic-theme`):**
+1. Present interactive menu with predefined themes + custom search option
+2. Query `cosmic-themes.org/api/themes?search=<name>` API (returns JSON with `.ron` content)
+3. For custom searches with no exact match, show fuzzy results for user to pick
+4. Save `.ron` file to `~/.local/share/cosmic-themes/` cache
+5. Apply theme via `cosmic-settings appearance import <ron_file>` for immediate effect
 
 **Key files:**
-- `mise/tag-default/.config/mise/tasks/setup/cosmic-theme` — interactive task
+- `mise/tag-default/.config/mise/tasks/setup/cosmic` — umbrella task (prerequisites + theme)
+- `mise/tag-default/.config/mise/tasks/setup/cosmic-theme` — interactive theme task
+- `mise/tag-default/.config/mise/tasks/setup/cosmic-theme-clean` — cache cleanup task
 - `mise/tag-default/.config/mise/tasks/lib/cosmic_theme_helper.py` — API search and download helper
 
 **COSMIC theme config architecture:**
 - Themes use `.ron` (Rusty Object Notation) files
 - `cosmic-settings appearance import` handles parsing, writing config entries, and live-reloading the theme (same mechanism the Settings GUI uses)
 
-**When applying:** Always prompt the user — this task is designed to run interactively on every bootstrap. Users can skip to keep their current theme.
+**When applying:** Add new COSMIC-specific prerequisites to `setup:cosmic` (before the theme delegation). Theme selection is interactive — users can skip to keep their current theme.
 
 ---
 

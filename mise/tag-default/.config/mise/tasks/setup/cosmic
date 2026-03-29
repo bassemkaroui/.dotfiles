@@ -1,0 +1,91 @@
+#!/usr/bin/env bash
+#MISE description="Set up COSMIC desktop environment (prerequisites + theme)"
+#MISE raw=true
+set -eo pipefail
+
+# ─── Helpers ───────────────────────────────────────────────────────────────────
+
+TASK_NAME="setup:cosmic"
+LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../lib"
+source "$LIB_DIR/helpers.sh"
+
+# ─── Phase 1: COSMIC DE check ────────────────────────────────────────────────
+
+info "Phase 1: Check desktop environment"
+if ! is_cosmic; then
+    info "Desktop environment is '${DESKTOP_ENV:-unknown}' (not COSMIC). Skipping."
+    exit 0
+fi
+ok "COSMIC desktop detected"
+
+# ─── Phase 2: Prerequisites ──────────────────────────────────────────────────
+
+info "Phase 2: Install prerequisites"
+
+# ── ddcutil ──────────────────────────────────────────────────────────────────
+info "  ddcutil: external monitor brightness control"
+if command -v ddcutil &>/dev/null; then
+    ok "  ddcutil already installed: $(ddcutil --version 2>/dev/null | head -1)"
+else
+    if command -v sudo &>/dev/null; then
+        if command -v nala &>/dev/null; then
+            sudo nala install -y ddcutil || sudo apt-get install -y ddcutil || fail "Failed to install ddcutil"
+        elif command -v apt-get &>/dev/null; then
+            sudo apt-get install -y ddcutil || fail "Failed to install ddcutil"
+        else
+            fail "No supported package manager found (nala/apt)"
+        fi
+        ok_changed "  ddcutil installed"
+    else
+        fail "sudo not available — cannot install ddcutil"
+    fi
+fi
+
+# ── i2c udev rule ────────────────────────────────────────────────────────────
+info "  i2c udev rule for ddcutil"
+UDEV_RULE="/etc/udev/rules.d/45-ddcutil-i2c.rules"
+UDEV_CHANGED=false
+
+if [[ -f "$UDEV_RULE" ]]; then
+    ok "  udev rule already exists: $UDEV_RULE"
+else
+    SHIPPED_RULE="/usr/share/ddcutil/data/45-ddcutil-i2c.rules"
+    if [[ -f "$SHIPPED_RULE" ]]; then
+        sudo cp "$SHIPPED_RULE" "$UDEV_RULE"
+        ok_changed "  udev rule copied from $SHIPPED_RULE"
+    else
+        echo 'KERNEL=="i2c-[0-9]*", GROUP="i2c", MODE="0660"' | sudo tee "$UDEV_RULE" >/dev/null
+        ok_changed "  udev rule created at $UDEV_RULE"
+    fi
+    UDEV_CHANGED=true
+fi
+
+# ── i2c group ────────────────────────────────────────────────────────────────
+info "  i2c group membership"
+CURRENT_USER="$(whoami)"
+
+if ! getent group i2c &>/dev/null; then
+    sudo groupadd i2c
+    ok_changed "  Created i2c group"
+else
+    ok "  i2c group already exists"
+fi
+
+if id -nG "$CURRENT_USER" | grep -qw i2c; then
+    ok "  User '$CURRENT_USER' already in i2c group"
+else
+    sudo usermod -aG i2c "$CURRENT_USER"
+    ok_changed "  Added '$CURRENT_USER' to i2c group (log out/in to take effect)"
+fi
+
+# ── Reload udev rules (only if changed) ─────────────────────────────────────
+if [[ "$UDEV_CHANGED" == true ]]; then
+    sudo udevadm control --reload-rules
+    sudo udevadm trigger
+    ok_changed "  udev rules reloaded"
+fi
+
+# ─── Phase 3: Theme setup ────────────────────────────────────────────────────
+
+info "Phase 3: Theme setup"
+mise run setup:cosmic-theme
