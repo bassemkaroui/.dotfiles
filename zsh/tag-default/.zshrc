@@ -48,7 +48,6 @@ fi
 
 export MISE_TRUSTED_CONFIG_PATHS="$HOME/.config/mise"
 eval "$(mise activate zsh)"
-eval "$(mise hook-env -s zsh)"
 # <<< mise-setup
 
 # If you come from bash you might have to change your $PATH.
@@ -127,6 +126,24 @@ source $ZSH/oh-my-zsh.sh
 
 # >>> mise-shell-tools (managed by mise run setup:shell-tools — do not edit)
 
+# ── Cache helper ──
+# Caches eval output to ~/.cache/zsh/, regenerates in background if stale (>24h)
+_zsh_cache_eval() {
+    local name=$1; shift
+    local cache_dir="${XDG_CACHE_HOME:-$HOME/.cache}/zsh"
+    local cache_file="$cache_dir/$name.zsh"
+    [[ -d "$cache_dir" ]] || mkdir -p "$cache_dir"
+    if [[ -f "$cache_file" ]]; then
+        source "$cache_file"
+        if [[ -n $(find "$cache_file" -mmin +1440 2>/dev/null) ]]; then
+            { eval "$*" >| "$cache_file" } 2>/dev/null &|
+        fi
+    else
+        eval "$*" >| "$cache_file"
+        source "$cache_file"
+    fi
+}
+
 # ── History ──
 HISTSIZE=50000
 HISTFILE=~/.zsh_history
@@ -149,7 +166,7 @@ zstyle ':fzf-tab:complete:cd:*' fzf-preview 'eza --color=always $realpath'
 zstyle ':fzf-tab:complete:__zoxide_z:*' fzf-preview 'eza --color=always $realpath'
 
 # ── Zoxide ──
-eval "$(zoxide init --cmd cd zsh)"
+_zsh_cache_eval zoxide 'zoxide init --cmd cd zsh'
 
 # ── FZF + fd ──
 [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
@@ -192,11 +209,12 @@ export EDITOR=nvim
 export SUDO_EDITOR=$(which nvim)
 
 # ── UV completions ──
-eval "$(uvx --generate-shell-completion zsh)"
-eval "$(uv generate-shell-completion zsh)"
+_zsh_cache_eval uvx-completion 'uvx --generate-shell-completion zsh'
+_zsh_cache_eval uv-completion 'uv generate-shell-completion zsh'
 
 # ── Python PATH fix for Neovim ──
-export PATH=$(dirname $(realpath $(which python3))):$PATH
+_python3_path=$(realpath ${commands[python3]} 2>/dev/null) && export PATH="${_python3_path:h}:$PATH"
+unset _python3_path
 
 # ── Yazi ──
 function y() {
@@ -210,16 +228,17 @@ function y() {
 # <<< mise-shell-tools
 
 # >>> gh-token (managed by mise run setup:zsh-config — do not edit)
-# GitHub token for API access (e.g., remote-nvim downloads)
-if (( $+commands[gh] )) && gh auth status &>/dev/null; then
-    export GITHUB_TOKEN="$(gh auth token 2>/dev/null)"
+# GitHub token for API access (lazy-loaded at first prompt)
+if (( $+commands[gh] )); then
+    _gh_token_precmd() {
+        if gh auth status &>/dev/null; then
+            export GITHUB_TOKEN="$(gh auth token 2>/dev/null)"
+        fi
+        add-zsh-hook -d precmd _gh_token_precmd
+    }
+    add-zsh-hook precmd _gh_token_precmd
 fi
 # <<< gh-token
-
-# GitHub token for API access (e.g., remote-nvim downloads)
-if (( $+commands[gh] )) && gh auth status &>/dev/null; then
-    export GITHUB_TOKEN="$(gh auth token 2>/dev/null)"
-fi
 
 # User configuration
 
@@ -247,23 +266,18 @@ fi
 # alias zshconfig="mate ~/.zshrc"
 # alias ohmyzsh="mate ~/.oh-my-zsh"
 
-# >>> conda initialize >>>
-# !! Contents within this block are managed by 'conda init' !!
-__conda_setup="$('$HOME/miniforge3/bin/conda' 'shell.zsh' 'hook' 2> /dev/null)"
-if [ $? -eq 0 ]; then
-    eval "$__conda_setup"
-else
-    if [ -f "$HOME/miniforge3/etc/profile.d/conda.sh" ]; then
-        . "$HOME/miniforge3/etc/profile.d/conda.sh"
-    else
-        export PATH="$HOME/miniforge3/bin:$PATH"
+# >>> conda initialize (lazy) >>>
+_conda_init() {
+    unfunction conda mamba 2>/dev/null
+    local __conda_setup="$("$HOME/miniforge3/bin/conda" 'shell.zsh' 'hook' 2>/dev/null)"
+    if [ $? -eq 0 ]; then eval "$__conda_setup"
+    elif [ -f "$HOME/miniforge3/etc/profile.d/conda.sh" ]; then . "$HOME/miniforge3/etc/profile.d/conda.sh"
+    else export PATH="$HOME/miniforge3/bin:$PATH"
     fi
-fi
-unset __conda_setup
-
-if [ -f "$HOME/miniforge3/etc/profile.d/mamba.sh" ]; then
-    . "$HOME/miniforge3/etc/profile.d/mamba.sh"
-fi
+    [[ -f "$HOME/miniforge3/etc/profile.d/mamba.sh" ]] && . "$HOME/miniforge3/etc/profile.d/mamba.sh"
+}
+conda() { _conda_init; conda "$@" }
+mamba() { _conda_init; mamba "$@" }
 # <<< conda initialize <<<
 
 # JAVA_HOME=/usr/lib/jvm/jdk-11.0.11
@@ -275,22 +289,25 @@ export PATH=$PATH:/usr/share/code/bin
 [[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
 
 # 1Password CLI autocompletion
-if (( $+commands[op] )); then eval "$(op completion zsh)"; compdef _op op; fi
+if (( $+commands[op] )); then _zsh_cache_eval op-completion 'op completion zsh'; compdef _op op; fi
 
 # >>>> Vagrant command completion (start)
-fpath=(/opt/vagrant/embedded/gems/2.3.0/gems/vagrant-2.3.0/contrib/zsh $fpath)
-compinit
+# Note: compinit already called by oh-my-zsh; only add fpath if dir exists
+if [[ -d /opt/vagrant/embedded/gems ]]; then
+    local _vag_dir=(/opt/vagrant/embedded/gems/*/gems/vagrant-*/contrib/zsh(N[1]))
+    [[ -n "$_vag_dir" ]] && fpath=("$_vag_dir" $fpath)
+fi
 # <<<<  Vagrant command completion (end)
 
 if (( $+commands[kubectl] )); then
-    source <(kubectl completion zsh)
     alias k=kubectl
+    kubectl() { unfunction kubectl; source <(command kubectl completion zsh); command kubectl "$@" }
 fi
 # export PATH="$PATH:/opt/nvim-linux-x86_64/bin"
 export PATH=$PATH:/usr/local/go/bin
 
-if (( $+commands[register-python-argcomplete] )); then eval "$(register-python-argcomplete cz)"; fi
+if (( $+commands[register-python-argcomplete] )); then _zsh_cache_eval argcomplete-cz 'register-python-argcomplete cz'; fi
 
 # # shell completion for duty (installed using uv tool)
 # source <(duty --completion)
-if (( $+commands[fga] )); then eval "$(fga completion zsh)"; fi
+if (( $+commands[fga] )); then _zsh_cache_eval fga-completion 'fga completion zsh'; fi
