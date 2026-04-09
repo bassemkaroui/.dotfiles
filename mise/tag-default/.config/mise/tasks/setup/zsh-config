@@ -83,7 +83,6 @@ fi
 
 export MISE_TRUSTED_CONFIG_PATHS="$HOME/.config/mise"
 eval "$(mise activate zsh)"
-eval "$(mise hook-env -s zsh)"
 # <<< mise-setup'
 
     # Insert after p10k instant prompt so mise-managed tools (zoxide, fzf, etc.)
@@ -161,9 +160,15 @@ if grep -q "$GH_TOKEN_MARKER" "$ZSHRC" 2>/dev/null; then
     ok "GitHub token block already present in .zshrc"
 else
     GH_TOKEN_BLOCK='# >>> gh-token (managed by mise run setup:zsh-config — do not edit)
-# GitHub token for API access (e.g., remote-nvim downloads)
-if (( $+commands[gh] )) && gh auth status &>/dev/null; then
-    export GITHUB_TOKEN="$(gh auth token 2>/dev/null)"
+# GitHub token for API access (lazy-loaded at first prompt)
+if (( $+commands[gh] )); then
+    _gh_token_precmd() {
+        if gh auth status &>/dev/null; then
+            export GITHUB_TOKEN="$(gh auth token 2>/dev/null)"
+        fi
+        add-zsh-hook -d precmd _gh_token_precmd
+    }
+    add-zsh-hook precmd _gh_token_precmd
 fi
 # <<< gh-token'
 

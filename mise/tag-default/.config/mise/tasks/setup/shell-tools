@@ -25,6 +25,26 @@ build_shell_tools_block() {
     local block=""
     block+="# >>> mise-shell-tools (managed by mise run setup:shell-tools — do not edit)"$'\n'
 
+    # ── Cache helper ──
+    block+=$'\n'
+    block+="# ── Cache helper ──"$'\n'
+    block+="# Caches eval output to ~/.cache/zsh/, regenerates in background if stale (>24h)"$'\n'
+    block+='_zsh_cache_eval() {'$'\n'
+    block+='    local name=$1; shift'$'\n'
+    block+='    local cache_dir="${XDG_CACHE_HOME:-$HOME/.cache}/zsh"'$'\n'
+    block+='    local cache_file="$cache_dir/$name.zsh"'$'\n'
+    block+='    [[ -d "$cache_dir" ]] || mkdir -p "$cache_dir"'$'\n'
+    block+='    if [[ -f "$cache_file" ]]; then'$'\n'
+    block+='        source "$cache_file"'$'\n'
+    block+='        if [[ -n $(find "$cache_file" -mmin +1440 2>/dev/null) ]]; then'$'\n'
+    block+='            { eval "$*" >| "$cache_file" } 2>/dev/null &|'$'\n'
+    block+='        fi'$'\n'
+    block+='    else'$'\n'
+    block+='        eval "$*" >| "$cache_file"'$'\n'
+    block+='        source "$cache_file"'$'\n'
+    block+='    fi'$'\n'
+    block+='}'$'\n'
+
     # ── History (always included) ──
     block+=$'\n'
     block+="# ── History ──"$'\n'
@@ -56,7 +76,7 @@ build_shell_tools_block() {
     if command -v zoxide &>/dev/null; then
         block+=$'\n'
         block+="# ── Zoxide ──"$'\n'
-        block+='eval "$(zoxide init --cmd cd zsh)"'$'\n'
+        block+="_zsh_cache_eval zoxide 'zoxide init --cmd cd zsh'"$'\n'
     fi
 
     # ── FZF + fd ──
@@ -119,15 +139,16 @@ build_shell_tools_block() {
     if command -v uv &>/dev/null && command -v uvx &>/dev/null; then
         block+=$'\n'
         block+="# ── UV completions ──"$'\n'
-        block+='eval "$(uvx --generate-shell-completion zsh)"'$'\n'
-        block+='eval "$(uv generate-shell-completion zsh)"'$'\n'
+        block+="_zsh_cache_eval uvx-completion 'uvx --generate-shell-completion zsh'"$'\n'
+        block+="_zsh_cache_eval uv-completion 'uv generate-shell-completion zsh'"$'\n'
     fi
 
     # ── Python PATH fix for Neovim ──
     if command -v nvim &>/dev/null && command -v python3 &>/dev/null; then
         block+=$'\n'
         block+="# ── Python PATH fix for Neovim ──"$'\n'
-        block+='export PATH=$(dirname $(realpath $(which python3))):$PATH'$'\n'
+        block+='_python3_path=$(realpath ${commands[python3]} 2>/dev/null) && export PATH="${_python3_path:h}:$PATH"'$'\n'
+        block+='unset _python3_path'$'\n'
     fi
 
     # ── Yazi ──
@@ -226,6 +247,9 @@ if grep -q '# >>> mise-shell-tools' "$ZSHRC" 2>/dev/null; then
     ok_changed "Removed previous mise-shell-tools block"
 fi
 
+# Cache helper function
+sed -i '/^_zsh_cache_eval()/,/^}/d' "$ZSHRC"
+
 # History settings
 sed -i '/^HISTSIZE=/d' "$ZSHRC"
 sed -i '/^HISTFILE=/d' "$ZSHRC"
@@ -252,6 +276,7 @@ sed -i "/^zstyle ':fzf-tab:complete:__zoxide_z:\*'/d" "$ZSHRC"
 
 # Zoxide
 sed -i '/^eval "\$(zoxide init/d' "$ZSHRC"
+sed -i '/^_zsh_cache_eval zoxide/d' "$ZSHRC"
 
 # FZF section
 sed -i '/^# ----------- FZF/d' "$ZSHRC"
@@ -294,6 +319,8 @@ sed -i '/^export SUDO_EDITOR=\$(which nvim)$/d' "$ZSHRC"
 # UV completions
 sed -i '/^eval "\$(uvx --generate-shell-completion zsh)"/d' "$ZSHRC"
 sed -i '/^eval "\$(uv generate-shell-completion zsh)"/d' "$ZSHRC"
+sed -i '/^_zsh_cache_eval uvx-completion/d' "$ZSHRC"
+sed -i '/^_zsh_cache_eval uv-completion/d' "$ZSHRC"
 sed -i '/^fpath+=~\/\.zfunc; autoload -Uz compinit; compinit$/d' "$ZSHRC"
 
 # Yazi function
@@ -303,6 +330,8 @@ sed -i '/^function y()/,/^}/d' "$ZSHRC"
 # Python PATH fix for neovim
 sed -i '/^# Fix for Neovim when working with managed pythons/d' "$ZSHRC"
 sed -i '/^export PATH=\$(dirname \$(realpath \$(which python3))):$PATH$/d' "$ZSHRC"
+sed -i '/^_python3_path=\$(realpath/d' "$ZSHRC"
+sed -i '/^unset _python3_path$/d' "$ZSHRC"
 
 # Collapse blank-line clusters
 sed -i '/^$/N;/^\n$/d' "$ZSHRC"
