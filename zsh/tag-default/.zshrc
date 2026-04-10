@@ -43,7 +43,9 @@ if (( $+commands[gh] )); then
 fi
 if (( $+commands[doppler] )); then
     fpath=("$HOME/.local/share/doppler/zsh/completions" $fpath)
-    { doppler completion install --no-check-version >/dev/null 2>&1 &| }
+    if [[ ! -f "$HOME/.local/share/doppler/zsh/completions/_doppler" ]]; then
+        { doppler completion install --no-check-version >/dev/null 2>&1 &| }
+    fi
 fi
 
 export MISE_TRUSTED_CONFIG_PATHS="$HOME/.config/mise"
