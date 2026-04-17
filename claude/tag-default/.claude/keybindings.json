@@ -40,7 +40,7 @@
     {
       "context": "Settings",
       "bindings": {
-        "q": "confirm:no",
+        "shift+q": "confirm:no",
         "escape": "confirm:no",
         "up": "select:previous",
         "down": "select:next",
@@ -60,7 +60,7 @@
         "y": "confirm:yes",
         "n": "confirm:no",
         "enter": "confirm:yes",
-        "q": "confirm:no",
+        "shift+q": "confirm:no",
         "escape": "confirm:no",
         "up": "confirm:previous",
         "down": "confirm:next",
@@ -167,7 +167,9 @@
       "context": "ModelPicker",
       "bindings": {
         "left": "modelPicker:decreaseEffort",
-        "right": "modelPicker:increaseEffort"
+        "h": "modelPicker:decreaseEffort",
+        "right": "modelPicker:increaseEffort",
+        "l": "modelPicker:increaseEffort"
       }
     },
     {
@@ -180,7 +182,7 @@
         "ctrl+n": "select:next",
         "ctrl+p": "select:previous",
         "enter": "select:accept",
-        "q": "select:cancel",
+        "shift+q": "select:cancel",
         "escape": "select:cancel"
       }
     },
