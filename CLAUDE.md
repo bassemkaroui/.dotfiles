@@ -20,12 +20,10 @@ A modular dotfiles management system using **GNU Stow** for clean symlink-based 
 .dotfiles/
 ├── bash/             → Shell configurations (tag-default/)
 ├── zsh/              → Zsh config (tag-default/)
-├── git/              → Git config & helpers (tag-default/)
 ├── tmux/             → Tmux + oh-my-tmux submodule (tag-default/)
 ├── nvim/             → Neovim config submodule (tag-default/)
 ├── p10k/             → Powerlevel10k prompt (tag-default/)
-├── ssh/              → SSH configs (tag-desktop/, tag-laptop/)
-├── fzf/, yazi/, bat/ → CLI tool configs (tag-default/)
+├── fzf/, yazi/, bat/, ruff/ → CLI tool configs (tag-default/)
 ├── gh/, gh-dash/     → GitHub CLI & dashboard configs (tag-default/)
 ├── claude/           → Claude Code IDE config (tag-default/)
 ├── mise/             → Mise tool config — nested stow (tag-default/)
@@ -53,7 +51,7 @@ mise run bootstrap      # Full machine setup
 
 ```bash
 stow -d bash -t ~ tag-default              # Deploy a single package (default tag)
-stow -d ssh -t ~ tag-laptop                # Deploy a device-specific variant
+stow -d <package> -t ~ tag-laptop          # Deploy a device-specific variant (e.g. tag-laptop/tag-desktop)
 ```
 
 ## Essential Commands
@@ -76,7 +74,7 @@ stow -d ssh -t ~ tag-laptop                # Deploy a device-specific variant
 ## Key Patterns
 
 - **Modular via Stow:** Each tool in its own package; deploy selectively
-- **Uniform tag layout:** All packages use `tag-*` subdirectories (e.g., `bash/tag-default/`, `ssh/tag-laptop/`). Deployed based on `.device-tag` with fallback to `tag-default/`
+- **Uniform tag layout:** All packages use `tag-*` subdirectories (e.g. `bash/tag-default/`; a device-specific variant would live at `<package>/tag-laptop/`). Deployed based on `.device-tag` with fallback to `tag-default/`
 - **Graphical detection:** Ghostty and GNOME extensions installation checks for graphical environment (`$DISPLAY`, `$WAYLAND_DISPLAY`, etc.) instead of device type. Override via `.graphical-env`
 - **Desktop environment detection:** DE-specific packages (GNOME themes, extensions) are auto-excluded when not on the matching DE. Detection via `.desktop-env` override → `$XDG_CURRENT_DESKTOP` → binary/directory fallback. Helpers: `is_gnome()`, `is_cosmic()` in `helpers.sh`
 - **Per-machine exclusions:** `.stow-exclude` (gitignored) lists packages to skip on a specific machine; managed interactively by `setup:dotfiles`

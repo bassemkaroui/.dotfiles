@@ -7,7 +7,7 @@ delta = "latest"
 "npm:corepack" = "latest"
 claude = "latest"
 "npm:@anthropic-ai/sandbox-runtime" = "latest"
-doppler = "latest"
+doppler = { version = "latest", exe = "doppler" }
 pre-commit = "latest"
 tlrc = "latest"
 gh = "latest"
