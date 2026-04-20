@@ -2,4 +2,4 @@
 "cargo:tree-sitter-cli" = { version = "latest", depends = "rust" }
 fd = "latest"
 ripgrep = "latest"
-neovim = "0.12.1"
+neovim = "stable"
