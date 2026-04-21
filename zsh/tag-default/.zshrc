@@ -328,4 +328,4 @@ if (( $+commands[register-python-argcomplete] )); then _zsh_cache_eval argcomple
 
 # # shell completion for duty (installed using uv tool)
 # source <(duty --completion)
-(( $+commands[fga] )) && _zsh_lazy_completion fga 'fga completion zsh'
+if (( $+commands[fga] )); then _zsh_lazy_completion fga 'fga completion zsh'; fi
