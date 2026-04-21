@@ -146,6 +146,22 @@ _zsh_cache_eval() {
     fi
 }
 
+# ── Lazy completion helper ──
+# Writes _<cmd> to $LAZY_COMPLETIONS_DIR once (in background), then relies on
+# fpath autoload for future shells. To refresh after a tool upgrade:
+#   rm "$LAZY_COMPLETIONS_DIR/_<cmd>"
+LAZY_COMPLETIONS_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/zsh/completions"
+[[ -d "$LAZY_COMPLETIONS_DIR" ]] || mkdir -p "$LAZY_COMPLETIONS_DIR"
+fpath=("$LAZY_COMPLETIONS_DIR" $fpath)
+_zsh_lazy_completion() {
+    local cmd=$1; shift
+    local target="$LAZY_COMPLETIONS_DIR/_$cmd"
+    typeset -g -A _comps
+    autoload -Uz "_$cmd"
+    _comps[$cmd]="_$cmd"
+    [[ -f "$target" ]] || { eval "$*" >| "$target" } 2>/dev/null &|
+}
+
 # ── History ──
 HISTSIZE=50000
 HISTFILE=~/.zsh_history
@@ -211,8 +227,8 @@ export EDITOR=nvim
 export SUDO_EDITOR=$(which nvim)
 
 # ── UV completions ──
-_zsh_cache_eval uvx-completion 'uvx --generate-shell-completion zsh'
-_zsh_cache_eval uv-completion 'uv generate-shell-completion zsh'
+(( $+commands[uv] ))  && _zsh_lazy_completion uv  'uv generate-shell-completion zsh'
+(( $+commands[uvx] )) && _zsh_lazy_completion uvx 'uvx --generate-shell-completion zsh'
 
 # ── Python PATH fix for Neovim ──
 _python3_path=$(realpath ${commands[python3]} 2>/dev/null) && export PATH="${_python3_path:h}:$PATH"
@@ -291,7 +307,7 @@ export PATH=$PATH:/usr/share/code/bin
 [[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
 
 # 1Password CLI autocompletion
-if (( $+commands[op] )); then _zsh_cache_eval op-completion 'op completion zsh'; compdef _op op; fi
+(( $+commands[op] )) && _zsh_lazy_completion op 'op completion zsh'
 
 # >>>> Vagrant command completion (start)
 # Note: compinit already called by oh-my-zsh; only add fpath if dir exists
@@ -312,4 +328,4 @@ if (( $+commands[register-python-argcomplete] )); then _zsh_cache_eval argcomple
 
 # # shell completion for duty (installed using uv tool)
 # source <(duty --completion)
-if (( $+commands[fga] )); then _zsh_cache_eval fga-completion 'fga completion zsh'; fi
+(( $+commands[fga] )) && _zsh_lazy_completion fga 'fga completion zsh'
