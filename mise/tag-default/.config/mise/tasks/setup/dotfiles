@@ -338,18 +338,38 @@ if ((${#CUSTOM_PACKAGES[@]} > 0)); then
     ok_changed "Custom packages deployed: ${CUSTOM_PACKAGES[*]}"
 fi
 
+# Normalize a submodule to a named local branch (caller must cd into the
+# submodule first). Handles fresh clones and shallow CI checkouts where
+# `git submodule update --init --depth=1` leaves the submodule in detached
+# HEAD with only origin/<branch> present (no local branch yet).
+checkout_submodule_branch() {
+    local branch="$1" label="$2"
+    local current
+    current="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+    if [[ "$current" == "$branch" ]]; then
+        ok "$label submodule already on $branch"
+        return 0
+    fi
+    if ! git show-ref --verify --quiet "refs/heads/$branch"; then
+        git fetch --quiet origin "$branch" 2>/dev/null || true
+        if git show-ref --verify --quiet "refs/remotes/origin/$branch"; then
+            git branch "$branch" "origin/$branch"
+        fi
+    fi
+    if git show-ref --verify --quiet "refs/heads/$branch"; then
+        git checkout --quiet "$branch"
+        ok_changed "$label submodule checked out to $branch"
+    else
+        warn "$branch branch unavailable — $label submodule left at pinned SHA"
+    fi
+}
+
 # ─── Phase 5: Ensure tmux submodule is on master ─────────────────────────────
 
 info "Phase 5: Tmux submodule"
 if [[ -e "$DOTFILES_DIR/tmux/tag-default/.tmux/.git" ]]; then
     cd "$DOTFILES_DIR/tmux/tag-default/.tmux"
-    CURRENT_BRANCH="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
-    if [[ "$CURRENT_BRANCH" != "master" ]]; then
-        git checkout master
-        ok_changed "tmux submodule checked out to master"
-    else
-        ok "tmux submodule already on master"
-    fi
+    checkout_submodule_branch master tmux
 else
     warn "tmux submodule not found at tmux/tag-default/.tmux"
 fi
@@ -359,13 +379,7 @@ fi
 info "Phase 6: Neovim submodule"
 if [[ -e "$DOTFILES_DIR/nvim/tag-default/.config/nvim/.git" ]]; then
     cd "$DOTFILES_DIR/nvim/tag-default/.config/nvim"
-    CURRENT_BRANCH="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
-    if [[ "$CURRENT_BRANCH" != "custom_config" ]]; then
-        git checkout custom_config
-        ok_changed "nvim submodule checked out to custom_config"
-    else
-        ok "nvim submodule already on custom_config"
-    fi
+    checkout_submodule_branch custom_config nvim
 else
     warn "nvim submodule not found at nvim/tag-default/.config/nvim"
 fi
