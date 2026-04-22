@@ -42,7 +42,8 @@ if [[ -f "$CUSTOM_FILE" ]]; then
         for j in "${!ALL_CUSTOM_NAMES[@]}"; do
             if [[ "${ALL_CUSTOM_NAMES[$j]}" == "$local_name" ]]; then
                 if [[ "${ALL_CUSTOM_TAGS[$j]}" == "$DEVICE_TAG" ]]; then
-                    resolved_tag="$DEVICE_TAG"; break
+                    resolved_tag="$DEVICE_TAG"
+                    break
                 elif [[ "${ALL_CUSTOM_TAGS[$j]}" == "default" ]]; then
                     fallback_tag="default"
                 fi
@@ -112,71 +113,71 @@ while true; do
     read -r MODIFY_CHOICE
 
     case "${MODIFY_CHOICE,,}" in
-    a | add)
-        # Build list of available (non-excluded) packages, hiding custom overrides
-        AVAILABLE=()
-        for pkg in "${ALL_DEFAULT_PACKAGES[@]}"; do
-            in_array "$pkg" "${EXCLUDED[@]}" && continue
-            in_array "$pkg" "${CUSTOM_PACKAGES[@]}" && continue
-            AVAILABLE+=("$pkg")
-        done
-        if ((${#AVAILABLE[@]} == 0)); then
-            warn "All packages are already excluded"
-            continue
-        fi
-        info "Available packages:"
-        for i in "${!AVAILABLE[@]}"; do
-            printf '  %d) %s\n' "$((i + 1))" "${AVAILABLE[$i]}"
-        done
-        printf 'Enter numbers to exclude (space-separated), or Enter to cancel: '
-        read -r ADD_CHOICES
-        [[ -z "$ADD_CHOICES" ]] && continue
-        for choice in $ADD_CHOICES; do
-            if [[ "$choice" =~ ^[0-9]+$ ]] && ((choice >= 1 && choice <= ${#AVAILABLE[@]})); then
-                local_pkg="${AVAILABLE[$((choice - 1))]}"
-                EXCLUDED+=("$local_pkg")
-                info "  Added: $local_pkg"
-            else
-                warn "  Invalid selection: $choice"
+        a | add)
+            # Build list of available (non-excluded) packages, hiding custom overrides
+            AVAILABLE=()
+            for pkg in "${ALL_DEFAULT_PACKAGES[@]}"; do
+                in_array "$pkg" "${EXCLUDED[@]}" && continue
+                in_array "$pkg" "${CUSTOM_PACKAGES[@]}" && continue
+                AVAILABLE+=("$pkg")
+            done
+            if ((${#AVAILABLE[@]} == 0)); then
+                warn "All packages are already excluded"
+                continue
             fi
-        done
-        write_exclusions
-        ;;
-    r | remove)
-        if ((${#EXCLUDED[@]} == 0)); then
-            warn "No packages to remove from exclusions"
-            continue
-        fi
-        info "Currently excluded packages:"
-        for i in "${!EXCLUDED[@]}"; do
-            printf '  %d) %s\n' "$((i + 1))" "${EXCLUDED[$i]}"
-        done
-        printf 'Enter numbers to un-exclude (space-separated), or Enter to cancel: '
-        read -r REMOVE_CHOICES
-        [[ -z "$REMOVE_CHOICES" ]] && continue
-        TO_REMOVE=()
-        for choice in $REMOVE_CHOICES; do
-            if [[ "$choice" =~ ^[0-9]+$ ]] && ((choice >= 1 && choice <= ${#EXCLUDED[@]})); then
-                TO_REMOVE+=("${EXCLUDED[$((choice - 1))]}")
-                info "  Removed: ${EXCLUDED[$((choice - 1))]}"
-            else
-                warn "  Invalid selection: $choice"
+            info "Available packages:"
+            for i in "${!AVAILABLE[@]}"; do
+                printf '  %d) %s\n' "$((i + 1))" "${AVAILABLE[$i]}"
+            done
+            printf 'Enter numbers to exclude (space-separated), or Enter to cancel: '
+            read -r ADD_CHOICES
+            [[ -z "$ADD_CHOICES" ]] && continue
+            for choice in $ADD_CHOICES; do
+                if [[ "$choice" =~ ^[0-9]+$ ]] && ((choice >= 1 && choice <= ${#AVAILABLE[@]})); then
+                    local_pkg="${AVAILABLE[$((choice - 1))]}"
+                    EXCLUDED+=("$local_pkg")
+                    info "  Added: $local_pkg"
+                else
+                    warn "  Invalid selection: $choice"
+                fi
+            done
+            write_exclusions
+            ;;
+        r | remove)
+            if ((${#EXCLUDED[@]} == 0)); then
+                warn "No packages to remove from exclusions"
+                continue
             fi
-        done
-        # Rebuild EXCLUDED without removed items
-        NEW_EXCLUDED=()
-        for pkg in "${EXCLUDED[@]}"; do
-            in_array "$pkg" "${TO_REMOVE[@]}" || NEW_EXCLUDED+=("$pkg")
-        done
-        EXCLUDED=("${NEW_EXCLUDED[@]}")
-        write_exclusions
-        ;;
-    "")
-        break
-        ;;
-    *)
-        warn "Unrecognized input '$MODIFY_CHOICE'"
-        ;;
+            info "Currently excluded packages:"
+            for i in "${!EXCLUDED[@]}"; do
+                printf '  %d) %s\n' "$((i + 1))" "${EXCLUDED[$i]}"
+            done
+            printf 'Enter numbers to un-exclude (space-separated), or Enter to cancel: '
+            read -r REMOVE_CHOICES
+            [[ -z "$REMOVE_CHOICES" ]] && continue
+            TO_REMOVE=()
+            for choice in $REMOVE_CHOICES; do
+                if [[ "$choice" =~ ^[0-9]+$ ]] && ((choice >= 1 && choice <= ${#EXCLUDED[@]})); then
+                    TO_REMOVE+=("${EXCLUDED[$((choice - 1))]}")
+                    info "  Removed: ${EXCLUDED[$((choice - 1))]}"
+                else
+                    warn "  Invalid selection: $choice"
+                fi
+            done
+            # Rebuild EXCLUDED without removed items
+            NEW_EXCLUDED=()
+            for pkg in "${EXCLUDED[@]}"; do
+                in_array "$pkg" "${TO_REMOVE[@]}" || NEW_EXCLUDED+=("$pkg")
+            done
+            EXCLUDED=("${NEW_EXCLUDED[@]}")
+            write_exclusions
+            ;;
+        "")
+            break
+            ;;
+        *)
+            warn "Unrecognized input '$MODIFY_CHOICE'"
+            ;;
     esac
 done
 

@@ -91,6 +91,9 @@ jobs:
     # non-excluded package). Run twice to assert idempotency.
     name: stow smoke (${{ matrix.image }})
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
     strategy:
       fail-fast: false
       matrix:
