@@ -72,8 +72,19 @@ HEADER
     info "Created $STOW_EXCLUDE_FILE — edit to skip packages on this machine"
 fi
 
+if [[ "${DOTFILES_NONINTERACTIVE:-0}" == "1" ]]; then
+    read_exclusions
+    if ((${#EXCLUDED[@]} > 0)); then
+        ok "Exclusions (DOTFILES_NONINTERACTIVE): ${EXCLUDED[*]}"
+    else
+        ok "No exclusions (DOTFILES_NONINTERACTIVE)"
+    fi
+    exit 0
+fi
+
 # ─── p10k symlink-clobber detection ─────────────────────────────────────────
 if [[ -f "$HOME/.p10k.zsh" && ! -L "$HOME/.p10k.zsh" ]] && ! in_array "p10k" "${EXCLUDED[@]}"; then
+    # shellcheck disable=SC2088 # user-visible path in a display string
     warn "~/.p10k.zsh is a real file (not a stow symlink)"
     info "This usually happens after running 'p10k configure'."
     info "If p10k is not excluded, setup:dotfiles will back up this file and restore the old config."

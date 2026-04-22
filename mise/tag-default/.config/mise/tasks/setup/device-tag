@@ -126,6 +126,12 @@ elif [[ -f "$DEVICE_TAG_FILE" ]]; then
     OLD_TAG="$(<"$DEVICE_TAG_FILE")"
     info "Current device tag: $OLD_TAG"
 
+    if [[ "${DOTFILES_NONINTERACTIVE:-0}" == "1" ]]; then
+        DEVICE_TAG="$OLD_TAG"
+        ok "Device tag: $DEVICE_TAG (DOTFILES_NONINTERACTIVE)"
+        exit 0
+    fi
+
     printf 'Change device tag? (y/N): '
     read -r want_change
 
@@ -159,9 +165,14 @@ elif [[ -f "$DEVICE_TAG_FILE" ]]; then
 
 else
     # First-time setup — no migration needed
-    printf 'No device tag set. Tag for this machine [default]: '
-    read -r DEVICE_TAG
-    DEVICE_TAG="${DEVICE_TAG:-default}"
+    if [[ "${DOTFILES_NONINTERACTIVE:-0}" == "1" ]]; then
+        DEVICE_TAG="default"
+        info "DOTFILES_NONINTERACTIVE=1 — using default tag"
+    else
+        printf 'No device tag set. Tag for this machine [default]: '
+        read -r DEVICE_TAG
+        DEVICE_TAG="${DEVICE_TAG:-default}"
+    fi
 
     if [[ ! "$DEVICE_TAG" =~ ^[a-zA-Z0-9_-]+$ ]]; then
         fail "Invalid device tag '$DEVICE_TAG'. Must contain only letters, numbers, hyphens, and underscores."

@@ -1,0 +1,11 @@
+shell=bash
+external-sources=true
+source-path=SCRIPTDIR
+source-path=SCRIPTDIR/..
+source-path=SCRIPTDIR/../..
+source-path=./mise/tag-default/.config/mise/tasks
+source-path=./mise/tag-default/.config/mise/tasks/lib
+
+# SC2034: helpers.sh exposes shared vars/arrays consumed by sourcing scripts;
+# shellcheck can't follow that across files without the source-path hints above.
+disable=SC2034

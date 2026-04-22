@@ -1,14 +1,14 @@
-[tasks.init]
-description = "Bootstrap entry point: install stow, deploy mise config, then run full bootstrap"
-quiet = true
-raw = true
-run = """#!/usr/bin/env bash
+#!/usr/bin/env bash
+#MISE description="Bootstrap entry point: install stow, deploy mise config, then run full bootstrap"
+#MISE quiet=true
+#MISE raw=true
 set -eo pipefail
 
 # ─── Helpers ───────────────────────────────────────────────────────────────────
 
 TASK_NAME="init"
-source "$HOME/.dotfiles/mise/tag-default/.config/mise/tasks/lib/helpers.sh"
+# shellcheck source=../../mise/tag-default/.config/mise/tasks/lib/helpers.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../mise/tag-default/.config/mise/tasks/lib/helpers.sh"
 
 # ─── Step 1: Ensure stow is available ─────────────────────────────────────────
 
@@ -22,7 +22,11 @@ else
             mgr="${cmd%% *}"
             if command -v "$mgr" &>/dev/null; then
                 info "Trying: sudo $cmd"
-                if sudo $cmd; then INSTALLED=true; break; fi
+                # shellcheck disable=SC2086
+                if sudo $cmd; then
+                    INSTALLED=true
+                    break
+                fi
             fi
         done
     fi
@@ -55,7 +59,7 @@ else
         trap 'rm -rf "$TMPDIR_STOW"' EXIT
 
         info "Downloading stow ${STOW_VERSION}..."
-        curl -fSL -o "$TMPDIR_STOW/stow-${STOW_VERSION}.tar.gz" \\
+        curl -fSL -o "$TMPDIR_STOW/stow-${STOW_VERSION}.tar.gz" \
             "https://ftp.gnu.org/gnu/stow/stow-${STOW_VERSION}.tar.gz"
         tar xzf "$TMPDIR_STOW/stow-${STOW_VERSION}.tar.gz" -C "$TMPDIR_STOW"
         cd "$TMPDIR_STOW/stow-${STOW_VERSION}"
@@ -76,23 +80,12 @@ fi
 
 # ─── Step 2: Deploy mise config via stow ──────────────────────────────────────
 
-# Find next available .bak suffix: .bak, .bak.1, .bak.2, ...
-next_backup_path() {
-    local path="$1"
-    local backup="$path.bak"
-    local i=1
-    while [[ -e "$backup" ]]; do
-        backup="$path.bak.$i"
-        ((i++))
-    done
-    printf '%s' "$backup"
-}
-
 # Back up conflicting real files/dirs inside ~/.config/mise/
 # Recurses through shared dirs (.config) and backs up package-owned contents.
+# Uses next_backup_path() from helpers.sh.
 backup_mise_conflicts() {
-    local pkg_dir="$1"  # source dir in stow package
-    local target="$2"   # corresponding target dir
+    local pkg_dir="$1" # source dir in stow package
+    local target="$2"  # corresponding target dir
 
     for entry in "$pkg_dir"/.* "$pkg_dir"/*; do
         [[ -e "$entry" ]] || continue
@@ -101,8 +94,8 @@ backup_mise_conflicts() {
         [[ "$name" == "." || "$name" == ".." ]] && continue
 
         local target_path="$target/$name"
-        [[ -e "$target_path" ]] || continue  # no conflict
-        [[ -L "$target_path" ]] && continue  # already a symlink, skip
+        [[ -e "$target_path" ]] || continue # no conflict
+        [[ -L "$target_path" ]] && continue # already a symlink, skip
 
         if [[ -f "$target_path" ]]; then
             local bak_path
@@ -124,21 +117,21 @@ backup_mise_conflicts() {
 }
 
 info "Step 2: Deploy mise config via stow"
-cd ~/.dotfiles
-mkdir -p ~/.config
+cd "$HOME/.dotfiles"
+mkdir -p "$HOME/.config"
 
-stow_output="$(stow -nv -d "$HOME/.dotfiles/mise" -t ~ tag-default 2>&1)" || true
+stow_output="$(stow -nv -d "$HOME/.dotfiles/mise" -t "$HOME" tag-default 2>&1)" || true
 
 if echo "$stow_output" | grep -q "LINK:"; then
     # Fresh deploy — no conflicts, just needs linking
     backup_mise_conflicts "$HOME/.dotfiles/mise/tag-default" "$HOME"
-    stow -d "$HOME/.dotfiles/mise" -R -t ~ tag-default 2>&1 \
+    stow -d "$HOME/.dotfiles/mise" -R -t "$HOME" tag-default 2>&1 \
         | { grep -v '^BUG in find_stowed_path' || true; }
     ok_changed "mise config deployed to ~/.config/mise/"
 elif echo "$stow_output" | grep -qi "conflict"; then
     # Real files exist that block stow — back up and force deploy
     backup_mise_conflicts "$HOME/.dotfiles/mise/tag-default" "$HOME"
-    stow -d "$HOME/.dotfiles/mise" -R -t ~ tag-default 2>&1 \
+    stow -d "$HOME/.dotfiles/mise" -R -t "$HOME" tag-default 2>&1 \
         | { grep -v '^BUG in find_stowed_path' || true; }
     ok_changed "mise config deployed to ~/.config/mise/ (conflicts resolved via backup)"
 else
@@ -147,15 +140,16 @@ fi
 
 # ─── Step 3: Optionally run full bootstrap ────────────────────────────────────
 
-printf '\\n'
-read -rp $'\\033[1;34m[INFO]\\033[0m   Run full bootstrap now? [Y/n] ' answer
+printf '\n'
+if [[ "${DOTFILES_NONINTERACTIVE:-0}" == "1" ]]; then
+    info "DOTFILES_NONINTERACTIVE=1 — running full bootstrap"
+    mise run bootstrap
+    exit 0
+fi
+
+read -rp $'\033[1;34m[INFO]\033[0m   Run full bootstrap now? [Y/n] ' answer
 if [[ "${answer,,}" =~ ^(y|yes|)$ ]]; then
     mise run bootstrap
 else
     info "Skipped. Run 'mise run bootstrap' when ready."
 fi
-"""
-
-[tasks."mirror:dry-run"]
-description = "Test sanitization locally (no push)"
-run = "DRYRUN=1 bash scripts/sanitize-and-sync.sh"

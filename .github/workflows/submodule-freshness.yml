@@ -1,0 +1,64 @@
+name: Submodule freshness
+
+on:
+  schedule:
+    # 1st of every month, 06:00 UTC
+    - cron: '0 6 1 * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Install mise
+        run: |
+          curl -fsSL https://mise.run | sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Bump submodules
+        id: bump
+        run: |
+          set -euo pipefail
+          export PATH="$HOME/.local/bin:$PATH"
+          mise trust -y
+          # update:submodules stages pointer changes but does not commit.
+          mise run update:submodules | tee /tmp/update.log
+          if git diff --cached --quiet; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            # Build a compact per-submodule summary for the PR body
+            git diff --cached --submodule=log > /tmp/submodule.diff
+          fi
+
+      - name: Open PR if pointers moved
+        if: steps.bump.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@v7
+        with:
+          commit-message: "chore(submodules): bump to latest upstream"
+          title: "chore(submodules): bump to latest upstream"
+          branch: chore/bump-submodules
+          delete-branch: true
+          body: |
+            Automated monthly submodule bump.
+
+            ```
+            ${{ steps.bump.outputs.changed && 'See diff below' || '' }}
+            ```
+
+            <details>
+            <summary>Submodule diff</summary>
+
+            ```
+            $(cat /tmp/submodule.diff 2>/dev/null || true)
+            ```
+            </details>

@@ -1,0 +1,173 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint:
+    name: shellcheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install shellcheck
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+      - name: Run shellcheck
+        run: |
+          mapfile -t files < <(
+            find .mise/tasks mise/tag-default/.config/mise/tasks \
+              -type f \
+              \( -name "*.sh" -o ! -name "*.*" \) \
+              -not -path "*/.git/*"
+          )
+          printf 'Linting %d files\n' "${#files[@]}"
+          shellcheck --severity=warning "${files[@]}"
+
+  format:
+    name: shfmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install shfmt
+        run: |
+          curl -fsSL -o /tmp/shfmt \
+            https://github.com/mvdan/sh/releases/download/v3.10.0/shfmt_v3.10.0_linux_amd64
+          chmod +x /tmp/shfmt
+          sudo mv /tmp/shfmt /usr/local/bin/shfmt
+      - name: Run shfmt (diff mode)
+        run: |
+          mapfile -t files < <(
+            find .mise/tasks mise/tag-default/.config/mise/tasks \
+              -type f \
+              \( -name "*.sh" -o ! -name "*.*" \) \
+              -not -path "*/.git/*"
+          )
+          shfmt -d -i 4 -ci -bn "${files[@]}"
+
+  stow-dry-run:
+    name: stow dry-run (${{ matrix.package }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        package:
+          - bash
+          - bat
+          - claude
+          - fzf
+          - gh
+          - gh-dash
+          - ghostty
+          - gnome_themes
+          - gpg
+          - mise
+          - nvim
+          - p10k
+          - ruff
+          - tmux
+          - yazi
+          - zsh
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Install stow
+        run: sudo apt-get update && sudo apt-get install -y stow
+      - name: Dry-run stow ${{ matrix.package }}
+        run: |
+          # Fresh HOME so the dry-run is deterministic
+          fake_home="$(mktemp -d)"
+          mkdir -p "$fake_home/.config"
+          stow -nv -d "${{ matrix.package }}" -t "$fake_home" tag-default
+
+  stow-smoke:
+    # Narrower than "bootstrap smoke" by design: full `mise run bootstrap`
+    # touches graphical stacks (ghostty, gnome-extensions, cosmic) and desktop-specific
+    # install steps that are not reproducible in a headless container. Instead we
+    # verify the parts of bootstrap that CI *can* verify safely and deterministically:
+    # init (stow install + stow mise config) and setup:dotfiles (deploy every
+    # non-excluded package). Run twice to assert idempotency.
+    name: stow smoke (${{ matrix.image }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [ubuntu:24.04, ubuntu:22.04]
+    container:
+      image: ${{ matrix.image }}
+    env:
+      DEBIAN_FRONTEND: noninteractive
+      DOTFILES_NONINTERACTIVE: "1"
+      DOTFILES_TAG: default
+      HOME: /root
+    steps:
+      - name: Install base deps
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            git sudo curl ca-certificates perl make build-essential \
+            autoconf automake stow
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          path: repo
+      - name: Place repo at ~/.dotfiles
+        run: |
+          set -euo pipefail
+          ln -s "$GITHUB_WORKSPACE/repo" "$HOME/.dotfiles"
+          printf 'default' > "$HOME/.dotfiles/.device-tag"
+          # Block graphical/desktop packages that don't belong in a headless container
+          cat > "$HOME/.dotfiles/.stow-exclude" <<EOF
+          ghostty
+          gnome_themes
+          EOF
+          printf 'server' > "$HOME/.dotfiles/.graphical-env"
+      - name: Install mise
+        run: |
+          set -euo pipefail
+          curl -fsSL https://mise.run | sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: First run — init + setup:dotfiles + zsh-config + shell-tools
+        run: |
+          set -euo pipefail
+          export PATH="$HOME/.local/bin:$PATH"
+          cd "$HOME/.dotfiles"
+          mise trust -y
+          mise run init
+          mise run setup:dotfiles
+          mise run setup:zsh-config
+          mise run setup:shell-tools
+          mkdir -p /tmp/run1
+          find "$HOME" -maxdepth 4 -type l -printf '%p -> %l\n' 2>/dev/null | sort > /tmp/run1/symlinks.txt
+          git -C "$HOME/.dotfiles" submodule status > /tmp/run1/submodules.txt
+          find "$HOME" -maxdepth 6 \( -name "*.bak" -o -name "*.bak.*" \) 2>/dev/null | sort > /tmp/run1/backups.txt
+          # Capture the resolved .zshrc content — these two tasks edit through the symlink
+          cp "$(readlink -f "$HOME/.zshrc")" /tmp/run1/zshrc
+      - name: Second run (idempotency)
+        run: |
+          set -euo pipefail
+          export PATH="$HOME/.local/bin:$PATH"
+          cd "$HOME/.dotfiles"
+          mise run setup:dotfiles
+          mise run setup:zsh-config
+          mise run setup:shell-tools
+          mkdir -p /tmp/run2
+          find "$HOME" -maxdepth 4 -type l -printf '%p -> %l\n' 2>/dev/null | sort > /tmp/run2/symlinks.txt
+          git -C "$HOME/.dotfiles" submodule status > /tmp/run2/submodules.txt
+          find "$HOME" -maxdepth 6 \( -name "*.bak" -o -name "*.bak.*" \) 2>/dev/null | sort > /tmp/run2/backups.txt
+          cp "$(readlink -f "$HOME/.zshrc")" /tmp/run2/zshrc
+      - name: Assert idempotency contract
+        run: |
+          set -euo pipefail
+          fail=0
+          diff -u /tmp/run1/symlinks.txt /tmp/run2/symlinks.txt \
+            || { echo "::error::symlink graph changed between runs"; fail=1; }
+          diff -u /tmp/run1/submodules.txt /tmp/run2/submodules.txt \
+            || { echo "::error::submodule pointers moved between runs"; fail=1; }
+          diff -u /tmp/run1/backups.txt /tmp/run2/backups.txt \
+            || { echo "::error::second run created new *.bak files"; fail=1; }
+          diff -u /tmp/run1/zshrc /tmp/run2/zshrc \
+            || { echo "::error::.zshrc content changed between runs (setup:zsh-config or setup:shell-tools is not idempotent)"; fail=1; }
+          exit "$fail"

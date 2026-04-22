@@ -278,13 +278,15 @@ add_custom_package() {
         esac
     else
         # Single file
-        local pkg_dir="$CUSTOM_DIR/$pkg_name/tag-$pkg_tag/$(dirname "$rel_path")"
+        local pkg_dir
+        pkg_dir="$CUSTOM_DIR/$pkg_name/tag-$pkg_tag/$(dirname "$rel_path")"
         mkdir -p "$pkg_dir"
         cp -a "$source_path" "$pkg_dir/$(basename "$source_path")"
         info "  Copied file: $source_path"
     fi
 
-    # Collapse tilde for display in tracking file
+    # Literal '~' stored in the INI; read_custom_packages() expands it back to $HOME.
+    # shellcheck disable=SC2088
     local display_source="~/${rel_path}"
 
     # Update tracking arrays and write
@@ -412,7 +414,7 @@ remove_custom_package() {
             local remaining_tags
             remaining_tags=$(find "$CUSTOM_DIR/$pkg" -maxdepth 1 -type d -name 'tag-*' 2>/dev/null | wc -l)
             if ((remaining_tags == 0)); then
-                rm -rf "$CUSTOM_DIR/$pkg"
+                rm -rf "${CUSTOM_DIR:?}/${pkg:?}"
                 info "  Removed package directory: $pkg (no tagged variants remain)"
             fi
         fi
@@ -462,6 +464,16 @@ remove_custom_package() {
 
 info "Phase 0: Custom dotfiles packages"
 
+# Non-interactive: skip entirely if no custom dir exists; otherwise just verify
+if [[ "${DOTFILES_NONINTERACTIVE:-0}" == "1" ]]; then
+    if [[ ! -d "$CUSTOM_DIR" ]] || [[ ! -f "$CUSTOM_FILE" ]]; then
+        ok "No custom packages (DOTFILES_NONINTERACTIVE)"
+        exit 0
+    fi
+    ok "Custom packages detected at $CUSTOM_DIR (DOTFILES_NONINTERACTIVE — skipping management UI)"
+    exit 0
+fi
+
 # Check if .custom-packages exists — if not and no intent to add, skip quickly
 if [[ ! -f "$CUSTOM_FILE" ]]; then
     printf 'No custom packages configured. Add custom configs to dotfiles? (y/N): '
@@ -501,6 +513,8 @@ if [[ -f "$HOME/.p10k.zsh" && ! -L "$HOME/.p10k.zsh" ]] \
 
         PKG_NAMES+=("p10k")
         PKG_TAGS+=("$pkg_tag")
+        # Literal '~' stored in the INI; read_custom_packages() expands it back to $HOME.
+        # shellcheck disable=SC2088
         PKG_SOURCES+=("~/.p10k.zsh")
         PKG_TYPES+=("full")
         PKG_RECURSE_DIRS+=("")

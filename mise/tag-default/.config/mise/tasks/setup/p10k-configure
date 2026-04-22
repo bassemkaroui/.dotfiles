@@ -42,6 +42,7 @@ prepare_p10k_file() {
 
         if [[ "$target" == "$CUSTOM_DIR"/* ]]; then
             P10K_CUSTOM_TARGET="$target"
+            # shellcheck disable=SC2088 # user-visible path in a display string
             info "~/.p10k.zsh points to custom repo"
         elif [[ "$target" == "$DOTFILES_DIR"/* ]]; then
             cp --remove-destination "$target" "$p10k"
@@ -51,6 +52,7 @@ prepare_p10k_file() {
             warn "Replaced symlink (target: $target) with a real file"
         fi
     elif [[ ! -f "$p10k" ]]; then
+        # shellcheck disable=SC2088 # user-visible path in a display string
         warn "~/.p10k.zsh does not exist — run p10k configure to create it"
         return 1
     fi

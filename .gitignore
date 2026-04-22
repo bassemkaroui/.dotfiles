@@ -21,4 +21,14 @@ claude/tag-default/.claude/*
 !claude/tag-default/.claude/statusline-command.sh
 .sanitize.yml
 scripts/
-.github/
+
+# Editor / OS / tooling artifacts
+.mypy_cache/
+__pycache__/
+*.py[cod]
+.ruff_cache/
+.DS_Store
+*.swp
+*.swo
+.idea/
+.vscode/
