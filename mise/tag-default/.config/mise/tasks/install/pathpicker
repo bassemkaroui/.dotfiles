@@ -89,10 +89,10 @@ fi
 # Persist ~/.local/bin in PATH for future sessions (if not already set via stow)
 if [[ -f "$HOME/.zprofile" ]]; then
     if ! grep -q '\.local/bin' "$HOME/.zprofile" 2>/dev/null; then
-        echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$HOME/.zprofile"
+        echo 'export PATH="$HOME/.local/bin:$PATH"' >>"$HOME/.zprofile"
     fi
 else
-    echo 'export PATH="$HOME/.local/bin:$PATH"' > "$HOME/.zprofile"
+    echo 'export PATH="$HOME/.local/bin:$PATH"' >"$HOME/.zprofile"
 fi
 
 # ─── Phase 4: Verify ─────────────────────────────────────────────────────────

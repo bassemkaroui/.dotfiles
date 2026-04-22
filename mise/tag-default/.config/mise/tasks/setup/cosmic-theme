@@ -33,7 +33,7 @@ prompt_retry_or_abort() {
         RON_FILE="$THEMES_CACHE_DIR/${SAFE_FILENAME}.ron"
         DOWNLOAD_OUTPUT="$(python3 "$HELPER" download "$THEME_NAME" "$RON_FILE" 2>&1)" \
             && DOWNLOAD_EXIT=0 || DOWNLOAD_EXIT=$?
-        return 0  # signal: retry
+        return 0 # signal: retry
     else
         info "Aborted."
         exit 0
@@ -152,7 +152,7 @@ RON_FILE="$THEMES_CACHE_DIR/${SAFE_FILENAME}.ron"
 if [[ -f "$RON_FILE" ]]; then
     ok "Using cached theme: $RON_FILE"
     MATCHED_NAME="$THEME_NAME"
-    DOWNLOAD_EXIT=-1  # sentinel: skip download logic
+    DOWNLOAD_EXIT=-1 # sentinel: skip download logic
 else
     # Try exact-match download (non-zero exits are expected: 2=fuzzy, 3=no results)
     DOWNLOAD_OUTPUT="$(python3 "$HELPER" download "$THEME_NAME" "$RON_FILE" 2>&1)" \

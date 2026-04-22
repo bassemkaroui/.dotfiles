@@ -33,7 +33,7 @@ for entry in "${TOOLS[@]}"; do
         continue
     fi
 
-    if eval "$cmd" > "$target" 2>/dev/null; then
+    if eval "$cmd" >"$target" 2>/dev/null; then
         ok_changed "Generated _${tool}"
     else
         warn "Failed to generate _${tool}"

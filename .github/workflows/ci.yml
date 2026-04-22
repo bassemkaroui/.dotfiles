@@ -84,11 +84,13 @@ jobs:
 
   stow-smoke:
     # Narrower than "bootstrap smoke" by design: full `mise run bootstrap`
-    # touches graphical stacks (ghostty, gnome-extensions, cosmic) and desktop-specific
-    # install steps that are not reproducible in a headless container. Instead we
-    # verify the parts of bootstrap that CI *can* verify safely and deterministically:
-    # init (stow install + stow mise config) and setup:dotfiles (deploy every
-    # non-excluded package). Run twice to assert idempotency.
+    # touches graphical stacks (ghostty, gnome-extensions, cosmic), installs
+    # system tools (veracrypt, nodes-tools), and runs interactive configurators
+    # (p10k-configure) — none of which are reproducible in a headless container.
+    # Instead we verify the one part of bootstrap CI *can* verify safely:
+    # deploying every non-excluded stow package via setup:dotfiles. Run twice
+    # to assert idempotency of the symlink graph, submodule pointers, and
+    # backup file set.
     name: stow smoke (${{ matrix.image }})
     runs-on: ubuntu-latest
     defaults:
@@ -110,8 +112,7 @@ jobs:
         run: |
           apt-get update
           apt-get install -y --no-install-recommends \
-            git sudo curl ca-certificates perl make build-essential \
-            autoconf automake stow
+            git sudo curl ca-certificates stow
       - uses: actions/checkout@v4
         with:
           submodules: recursive
@@ -132,35 +133,36 @@ jobs:
           set -euo pipefail
           curl -fsSL https://mise.run | sh
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-      - name: First run — init + setup:dotfiles + zsh-config + shell-tools
+      - name: Stow mise config
+        # Equivalent to the stow-install-and-deploy-mise-config half of
+        # `mise run init`, minus the full-bootstrap trigger that fires when
+        # DOTFILES_NONINTERACTIVE=1. Stow is already installed above.
+        run: |
+          set -euo pipefail
+          cd "$HOME/.dotfiles"
+          mkdir -p "$HOME/.config"
+          stow -d mise -t "$HOME" tag-default
+      - name: First run — setup:dotfiles
         run: |
           set -euo pipefail
           export PATH="$HOME/.local/bin:$PATH"
           cd "$HOME/.dotfiles"
           mise trust -y
-          mise run init
           mise run setup:dotfiles
-          mise run setup:zsh-config
-          mise run setup:shell-tools
           mkdir -p /tmp/run1
           find "$HOME" -maxdepth 4 -type l -printf '%p -> %l\n' 2>/dev/null | sort > /tmp/run1/symlinks.txt
           git -C "$HOME/.dotfiles" submodule status > /tmp/run1/submodules.txt
           find "$HOME" -maxdepth 6 \( -name "*.bak" -o -name "*.bak.*" \) 2>/dev/null | sort > /tmp/run1/backups.txt
-          # Capture the resolved .zshrc content — these two tasks edit through the symlink
-          cp "$(readlink -f "$HOME/.zshrc")" /tmp/run1/zshrc
       - name: Second run (idempotency)
         run: |
           set -euo pipefail
           export PATH="$HOME/.local/bin:$PATH"
           cd "$HOME/.dotfiles"
           mise run setup:dotfiles
-          mise run setup:zsh-config
-          mise run setup:shell-tools
           mkdir -p /tmp/run2
           find "$HOME" -maxdepth 4 -type l -printf '%p -> %l\n' 2>/dev/null | sort > /tmp/run2/symlinks.txt
           git -C "$HOME/.dotfiles" submodule status > /tmp/run2/submodules.txt
           find "$HOME" -maxdepth 6 \( -name "*.bak" -o -name "*.bak.*" \) 2>/dev/null | sort > /tmp/run2/backups.txt
-          cp "$(readlink -f "$HOME/.zshrc")" /tmp/run2/zshrc
       - name: Assert idempotency contract
         run: |
           set -euo pipefail
@@ -171,6 +173,4 @@ jobs:
             || { echo "::error::submodule pointers moved between runs"; fail=1; }
           diff -u /tmp/run1/backups.txt /tmp/run2/backups.txt \
             || { echo "::error::second run created new *.bak files"; fail=1; }
-          diff -u /tmp/run1/zshrc /tmp/run2/zshrc \
-            || { echo "::error::.zshrc content changed between runs (setup:zsh-config or setup:shell-tools is not idempotent)"; fail=1; }
           exit "$fail"

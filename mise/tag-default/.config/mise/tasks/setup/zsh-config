@@ -93,11 +93,11 @@ eval "$(mise activate zsh)"
             /p10k-instant-prompt/ { in_p10k = 1 }
             in_p10k && /^fi$/ { print; print ""; print block; in_p10k = 0; next }
             { print }
-        ' "$ZSHRC" > "${ZSHRC}.tmp" && mv -f "${ZSHRC}.tmp" "$ZSHRC"
+        ' "$ZSHRC" >"${ZSHRC}.tmp" && mv -f "${ZSHRC}.tmp" "$ZSHRC"
         ok_changed "Added mise setup block to .zshrc (after p10k instant prompt)"
     else
         # No p10k instant prompt found — prepend to top of file
-        printf '%s\n\n' "$MISE_BLOCK" | cat - "$ZSHRC" > "${ZSHRC}.tmp" && mv -f "${ZSHRC}.tmp" "$ZSHRC"
+        printf '%s\n\n' "$MISE_BLOCK" | cat - "$ZSHRC" >"${ZSHRC}.tmp" && mv -f "${ZSHRC}.tmp" "$ZSHRC"
         ok_changed "Added mise setup block to top of .zshrc"
     fi
 fi
@@ -122,7 +122,7 @@ else
     if grep -q 'source.*oh-my-zsh.sh' "$ZSHRC"; then
         sed -i '/source.*oh-my-zsh.sh/i plugins=(git zsh-autosuggestions zsh-syntax-highlighting)' "$ZSHRC"
     else
-        printf '\nplugins=(git zsh-autosuggestions zsh-syntax-highlighting)\n' >> "$ZSHRC"
+        printf '\nplugins=(git zsh-autosuggestions zsh-syntax-highlighting)\n' >>"$ZSHRC"
     fi
     ok_changed "Added plugins line"
 fi
@@ -137,7 +137,7 @@ else
         sed -i 's/^ZSH_THEME=.*/ZSH_THEME="powerlevel10k\/powerlevel10k"/' "$ZSHRC"
         ok_changed "Updated ZSH_THEME to powerlevel10k"
     else
-        printf '\nZSH_THEME="powerlevel10k/powerlevel10k"\n' >> "$ZSHRC"
+        printf '\nZSH_THEME="powerlevel10k/powerlevel10k"\n' >>"$ZSHRC"
         ok_changed "Added ZSH_THEME"
     fi
 fi
@@ -182,11 +182,15 @@ fi
 
     if [[ -n "$INSERT_AFTER" ]]; then
         LINE_NUM="$(grep -n "$INSERT_AFTER" "$ZSHRC" | tail -1 | cut -d: -f1)"
-        { head -n "$LINE_NUM" "$ZSHRC"; printf '\n%s\n' "$GH_TOKEN_BLOCK"; tail -n +"$((LINE_NUM + 1))" "$ZSHRC"; } > "$ZSHRC.tmp"
+        {
+            head -n "$LINE_NUM" "$ZSHRC"
+            printf '\n%s\n' "$GH_TOKEN_BLOCK"
+            tail -n +"$((LINE_NUM + 1))" "$ZSHRC"
+        } >"$ZSHRC.tmp"
         mv "$ZSHRC.tmp" "$ZSHRC"
         ok_changed "Added GitHub token block after $INSERT_AFTER"
     else
-        printf '\n%s\n' "$GH_TOKEN_BLOCK" >> "$ZSHRC"
+        printf '\n%s\n' "$GH_TOKEN_BLOCK" >>"$ZSHRC"
         ok_changed "Added GitHub token block to end of .zshrc"
     fi
 fi

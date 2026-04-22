@@ -21,13 +21,13 @@ HAS_GRAPHICAL=false
 if [[ -f "$GRAPHICAL_ENV_FILE" ]]; then
     GRAPHICAL_PIN="$(<"$GRAPHICAL_ENV_FILE")"
     case "${GRAPHICAL_PIN,,}" in
-    graphical | yes)
-        HAS_GRAPHICAL=true
-        ;;
-    server | none | no)
-        info "Graphical environment disabled via .graphical-env. Skipping."
-        exit 0
-        ;;
+        graphical | yes)
+            HAS_GRAPHICAL=true
+            ;;
+        server | none | no)
+            info "Graphical environment disabled via .graphical-env. Skipping."
+            exit 0
+            ;;
     esac
 fi
 

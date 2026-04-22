@@ -109,7 +109,7 @@ if [[ -f "$ZSHRC" ]]; then
             if grep -q 'source.*oh-my-zsh.sh' "$ZSHRC"; then
                 sed -i '/source.*oh-my-zsh.sh/i ZSH_THEME="powerlevel10k/powerlevel10k"' "$ZSHRC"
             else
-                printf '\nZSH_THEME="powerlevel10k/powerlevel10k"\n' >> "$ZSHRC"
+                printf '\nZSH_THEME="powerlevel10k/powerlevel10k"\n' >>"$ZSHRC"
             fi
             ok_changed "Added ZSH_THEME=powerlevel10k to .zshrc"
         fi
@@ -158,7 +158,7 @@ if [[ "$CHANGE_ICON" =~ ^[Yy]$ ]]; then
                     END {
                         if (!found) print "WARNING: POWERLEVEL9K_OS_ICON_CONTENT_EXPANSION not found in .p10k.zsh" > "/dev/stderr"
                     }
-                ' "$P10K_FILE" > "${P10K_FILE}.tmp" && mv -f "${P10K_FILE}.tmp" "$P10K_FILE"
+                ' "$P10K_FILE" >"${P10K_FILE}.tmp" && mv -f "${P10K_FILE}.tmp" "$P10K_FILE"
                 ok_changed "OS icon updated in .p10k.zsh"
                 sync_custom_p10k
             else

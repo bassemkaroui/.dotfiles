@@ -7,11 +7,14 @@
 
 _pad=18 # column width for task name alignment
 
-info()       { printf '\033[1;34m[INFO]\033[0m \033[36m%-*s\033[0m ▸ %s\n' "$_pad" "$TASK_NAME" "$*"; }
-warn()       { printf '\033[1;33m[WARN]\033[0m \033[36m%-*s\033[0m ▸ %s\n' "$_pad" "$TASK_NAME" "$*"; }
-ok()         { printf '\033[1;32m[ OK ]\033[0m \033[36m%-*s\033[0m ▸ %s\n' "$_pad" "$TASK_NAME" "$*"; }
+info() { printf '\033[1;34m[INFO]\033[0m \033[36m%-*s\033[0m ▸ %s\n' "$_pad" "$TASK_NAME" "$*"; }
+warn() { printf '\033[1;33m[WARN]\033[0m \033[36m%-*s\033[0m ▸ %s\n' "$_pad" "$TASK_NAME" "$*"; }
+ok() { printf '\033[1;32m[ OK ]\033[0m \033[36m%-*s\033[0m ▸ %s\n' "$_pad" "$TASK_NAME" "$*"; }
 ok_changed() { printf '\033[1;32m[ OK ]\033[0m \033[36m%-*s\033[0m \033[1;32m●\033[0m %s\n' "$_pad" "$TASK_NAME" "$*"; }
-fail()       { printf '\033[1;31m[FAIL]\033[0m \033[36m%-*s\033[0m ▸ %s\n' "$_pad" "$TASK_NAME" "$*"; exit 1; }
+fail() {
+    printf '\033[1;31m[FAIL]\033[0m \033[36m%-*s\033[0m ▸ %s\n' "$_pad" "$TASK_NAME" "$*"
+    exit 1
+}
 
 # ─── Shared paths ─────────────────────────────────────────────────────────────
 
@@ -71,7 +74,7 @@ detect_desktop_env() {
     # 1. Override file
     if [[ -f "$DESKTOP_ENV_FILE" ]]; then
         DESKTOP_ENV="$(<"$DESKTOP_ENV_FILE")"
-        DESKTOP_ENV="${DESKTOP_ENV,,}"  # lowercase
+        DESKTOP_ENV="${DESKTOP_ENV,,}"   # lowercase
         DESKTOP_ENV="${DESKTOP_ENV// /}" # strip spaces
         if [[ "$DESKTOP_ENV" =~ ^(gnome|cosmic|unknown)$ ]]; then
             return 0
@@ -104,8 +107,14 @@ detect_desktop_env() {
     DESKTOP_ENV="unknown"
 }
 
-is_gnome() { detect_desktop_env; [[ "$DESKTOP_ENV" == "gnome" ]]; }
-is_cosmic() { detect_desktop_env; [[ "$DESKTOP_ENV" == "cosmic" ]]; }
+is_gnome() {
+    detect_desktop_env
+    [[ "$DESKTOP_ENV" == "gnome" ]]
+}
+is_cosmic() {
+    detect_desktop_env
+    [[ "$DESKTOP_ENV" == "cosmic" ]]
+}
 
 # Find next available .bak suffix: .bak, .bak.1, .bak.2, ...
 next_backup_path() {
@@ -130,7 +139,7 @@ unstow_package() {
         local tag_name
         tag_name="$(basename "$tag_dir")"
         # Only unstow and log if this tag actually has stowed symlinks
-        if stow -D -n -v -d "$base_dir/$pkg" -t "$HOME" "$tag_name" 2>&1 | grep -c '^UNLINK:' > /dev/null; then
+        if stow -D -n -v -d "$base_dir/$pkg" -t "$HOME" "$tag_name" 2>&1 | grep -c '^UNLINK:' >/dev/null; then
             stow -D -d "$base_dir/$pkg" -t "$HOME" "$tag_name" 2>/dev/null || true
             info "  Unstowed: $pkg/$tag_name"
         fi
@@ -213,7 +222,7 @@ read_custom_packages() {
     local current_name="" current_tag="" current_source="" current_type="" current_recurse=""
 
     while IFS= read -r line; do
-        line="${line%%#*}"           # strip comments
+        line="${line%%#*}" # strip comments
         [[ -z "${line// /}" ]] && continue
 
         if [[ "$line" =~ ^\[([^:]+)(:(.+))?\]$ ]]; then

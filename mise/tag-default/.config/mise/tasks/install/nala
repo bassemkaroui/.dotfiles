@@ -7,14 +7,14 @@ TASK_NAME="install:nala"
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../lib/helpers.sh"
 
 if command -v nala &>/dev/null; then
-  ok "nala already installed: $(command -v nala)"
-  exit 0
+    ok "nala already installed: $(command -v nala)"
+    exit 0
 fi
 
 info "Installing nala via apt..."
 
 if sudo -n apt-get install -y nala 2>/dev/null || sudo apt-get install -y nala; then
-  ok_changed "nala installed successfully"
+    ok_changed "nala installed successfully"
 else
-  warn "Could not install nala (no sudo access or nala not in apt repos). Skipping."
+    warn "Could not install nala (no sudo access or nala not in apt repos). Skipping."
 fi

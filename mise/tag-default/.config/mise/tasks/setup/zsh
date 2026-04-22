@@ -83,7 +83,7 @@ else
     # Ensure zsh is in /etc/shells
     if [[ -f /etc/shells ]] && ! grep -qx "$ZSH_PATH" /etc/shells 2>/dev/null; then
         if [[ -w /etc/shells ]]; then
-            echo "$ZSH_PATH" >> /etc/shells
+            echo "$ZSH_PATH" >>/etc/shells
             ok_changed "Added $ZSH_PATH to /etc/shells"
         elif command -v sudo &>/dev/null; then
             info "Adding $ZSH_PATH to /etc/shells..."
@@ -132,8 +132,8 @@ else
         LOGIN_FILE="$HOME/.bash_profile"
 
         if ! grep -q 'exec zsh' "$LOGIN_FILE" 2>/dev/null; then
-            echo "export SHELL=$ZSH_PATH" >> "$LOGIN_FILE"
-            echo 'exec zsh' >> "$LOGIN_FILE"
+            echo "export SHELL=$ZSH_PATH" >>"$LOGIN_FILE"
+            echo 'exec zsh' >>"$LOGIN_FILE"
             ok_changed "Added exec zsh to $LOGIN_FILE"
         else
             ok "exec zsh already in $LOGIN_FILE"
@@ -291,7 +291,7 @@ if command -v alacritty &>/dev/null; then
             ok_changed "Set font in Alacritty config"
         fi
     else
-        printf '\n[font.normal]\nfamily = "%s"\nsize = %s\n' "$NERD_FONT" "$NERD_FONT_SIZE" >> "$ALACRITTY_CFG"
+        printf '\n[font.normal]\nfamily = "%s"\nsize = %s\n' "$NERD_FONT" "$NERD_FONT_SIZE" >>"$ALACRITTY_CFG"
         ok_changed "Set font in Alacritty config"
     fi
     FONT_SET=true
@@ -310,7 +310,7 @@ if command -v kitty &>/dev/null; then
             ok_changed "Set font in Kitty config"
         fi
     else
-        printf '\nfont_family %s\nfont_size %s\n' "$NERD_FONT" "$NERD_FONT_SIZE" >> "$KITTY_CFG"
+        printf '\nfont_family %s\nfont_size %s\n' "$NERD_FONT" "$NERD_FONT_SIZE" >>"$KITTY_CFG"
         ok_changed "Set font in Kitty config"
     fi
     FONT_SET=true

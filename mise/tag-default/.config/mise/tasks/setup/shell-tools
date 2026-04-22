@@ -253,116 +253,116 @@ if [[ "$EXISTING_BLOCK" == "$SHELL_TOOLS_BLOCK" ]]; then
     ok "mise-shell-tools block already up-to-date in .zshrc"
 else
 
-# ─── Phase 3: Clean up old manual config lines ───────────────────────────────
+    # ─── Phase 3: Clean up old manual config lines ───────────────────────────────
 
-info "Phase 3: Clean up old manual config lines"
+    info "Phase 3: Clean up old manual config lines"
 
-# Remove any previous managed block and its trailing blank line
-if grep -q '# >>> mise-shell-tools' "$ZSHRC" 2>/dev/null; then
-    sed -i '/^# >>> mise-shell-tools/,/^# <<< mise-shell-tools/d' "$ZSHRC"
-    # Remove the blank line left behind after block deletion
-    sed -i '/^$/{N;/^\n$/d}' "$ZSHRC"
-    ok_changed "Removed previous mise-shell-tools block"
-fi
+    # Remove any previous managed block and its trailing blank line
+    if grep -q '# >>> mise-shell-tools' "$ZSHRC" 2>/dev/null; then
+        sed -i '/^# >>> mise-shell-tools/,/^# <<< mise-shell-tools/d' "$ZSHRC"
+        # Remove the blank line left behind after block deletion
+        sed -i '/^$/{N;/^\n$/d}' "$ZSHRC"
+        ok_changed "Removed previous mise-shell-tools block"
+    fi
 
-# Cache helper function
-sed -i '/^_zsh_cache_eval()/,/^}/d' "$ZSHRC"
+    # Cache helper function
+    sed -i '/^_zsh_cache_eval()/,/^}/d' "$ZSHRC"
 
-# History settings
-sed -i '/^HISTSIZE=/d' "$ZSHRC"
-sed -i '/^HISTFILE=/d' "$ZSHRC"
-sed -i '/^SAVEHIST=/d' "$ZSHRC"
-sed -i '/^HISTDUP=/d' "$ZSHRC"
-sed -i '/^setopt appendhistory$/d' "$ZSHRC"
-sed -i '/^setopt sharehistory$/d' "$ZSHRC"
-sed -i '/^setopt hist_ignore_space$/d' "$ZSHRC"
-sed -i '/^setopt hist_ignore_all_dups$/d' "$ZSHRC"
-sed -i '/^setopt hist_save_no_dups$/d' "$ZSHRC"
-sed -i '/^setopt hist_ignore_dups$/d' "$ZSHRC"
-sed -i '/^setopt hist_find_no_dups$/d' "$ZSHRC"
+    # History settings
+    sed -i '/^HISTSIZE=/d' "$ZSHRC"
+    sed -i '/^HISTFILE=/d' "$ZSHRC"
+    sed -i '/^SAVEHIST=/d' "$ZSHRC"
+    sed -i '/^HISTDUP=/d' "$ZSHRC"
+    sed -i '/^setopt appendhistory$/d' "$ZSHRC"
+    sed -i '/^setopt sharehistory$/d' "$ZSHRC"
+    sed -i '/^setopt hist_ignore_space$/d' "$ZSHRC"
+    sed -i '/^setopt hist_ignore_all_dups$/d' "$ZSHRC"
+    sed -i '/^setopt hist_save_no_dups$/d' "$ZSHRC"
+    sed -i '/^setopt hist_ignore_dups$/d' "$ZSHRC"
+    sed -i '/^setopt hist_find_no_dups$/d' "$ZSHRC"
 
-# Completion zstyles
-sed -i "/^zstyle ':completion:\*' matcher-list/d" "$ZSHRC"
-sed -i "/^# disable sort when completing/d" "$ZSHRC"
-sed -i "/^zstyle ':completion:\*:git-checkout:\*' sort false/d" "$ZSHRC"
-sed -i "/^# set list-colors to enable filename colorizing/d" "$ZSHRC"
-sed -i "/^zstyle ':completion:\*' list-colors/d" "$ZSHRC"
-sed -i "/^# force zsh not to show completion menu/d" "$ZSHRC"
-sed -i "/^zstyle ':completion:\*' menu no/d" "$ZSHRC"
-sed -i "/^zstyle ':fzf-tab:complete:cd:\*'/d" "$ZSHRC"
-sed -i "/^zstyle ':fzf-tab:complete:__zoxide_z:\*'/d" "$ZSHRC"
+    # Completion zstyles
+    sed -i "/^zstyle ':completion:\*' matcher-list/d" "$ZSHRC"
+    sed -i "/^# disable sort when completing/d" "$ZSHRC"
+    sed -i "/^zstyle ':completion:\*:git-checkout:\*' sort false/d" "$ZSHRC"
+    sed -i "/^# set list-colors to enable filename colorizing/d" "$ZSHRC"
+    sed -i "/^zstyle ':completion:\*' list-colors/d" "$ZSHRC"
+    sed -i "/^# force zsh not to show completion menu/d" "$ZSHRC"
+    sed -i "/^zstyle ':completion:\*' menu no/d" "$ZSHRC"
+    sed -i "/^zstyle ':fzf-tab:complete:cd:\*'/d" "$ZSHRC"
+    sed -i "/^zstyle ':fzf-tab:complete:__zoxide_z:\*'/d" "$ZSHRC"
 
-# Zoxide
-sed -i '/^eval "\$(zoxide init/d' "$ZSHRC"
-sed -i '/^_zsh_cache_eval zoxide/d' "$ZSHRC"
+    # Zoxide
+    sed -i '/^eval "\$(zoxide init/d' "$ZSHRC"
+    sed -i '/^_zsh_cache_eval zoxide/d' "$ZSHRC"
 
-# FZF section
-sed -i '/^# ----------- FZF/d' "$ZSHRC"
-sed -i '/^\[ -f ~\/\.fzf\.zsh \] && source/d' "$ZSHRC"
-sed -i '/^# -- Use fd instead of fzf/d' "$ZSHRC"
-sed -i '/^export FZF_DEFAULT_COMMAND=/d' "$ZSHRC"
-sed -i '/^export FZF_CTRL_T_COMMAND=/d' "$ZSHRC"
-sed -i '/^export FZF_ALT_C_COMMAND=/d' "$ZSHRC"
-sed -i '/^# Use fd.*for listing path candidates/d' "$ZSHRC"
-sed -i '/^# - The first argument to the function/d' "$ZSHRC"
-sed -i '/^# - See the source code/d' "$ZSHRC"
-# Multi-line function: _fzf_compgen_path
-sed -i '/^_fzf_compgen_path()/,/^}/d' "$ZSHRC"
-# Multi-line function: _fzf_compgen_dir
-sed -i '/^# Use fd to generate the list for directory completion/d' "$ZSHRC"
-sed -i '/^_fzf_compgen_dir()/,/^}/d' "$ZSHRC"
+    # FZF section
+    sed -i '/^# ----------- FZF/d' "$ZSHRC"
+    sed -i '/^\[ -f ~\/\.fzf\.zsh \] && source/d' "$ZSHRC"
+    sed -i '/^# -- Use fd instead of fzf/d' "$ZSHRC"
+    sed -i '/^export FZF_DEFAULT_COMMAND=/d' "$ZSHRC"
+    sed -i '/^export FZF_CTRL_T_COMMAND=/d' "$ZSHRC"
+    sed -i '/^export FZF_ALT_C_COMMAND=/d' "$ZSHRC"
+    sed -i '/^# Use fd.*for listing path candidates/d' "$ZSHRC"
+    sed -i '/^# - The first argument to the function/d' "$ZSHRC"
+    sed -i '/^# - See the source code/d' "$ZSHRC"
+    # Multi-line function: _fzf_compgen_path
+    sed -i '/^_fzf_compgen_path()/,/^}/d' "$ZSHRC"
+    # Multi-line function: _fzf_compgen_dir
+    sed -i '/^# Use fd to generate the list for directory completion/d' "$ZSHRC"
+    sed -i '/^_fzf_compgen_dir()/,/^}/d' "$ZSHRC"
 
-# Bat section
-sed -i '/^# ------------ bat/d' "$ZSHRC"
-sed -i '/^export BAT_THEME=/d' "$ZSHRC"
-sed -i '/^alias cat=bat$/d' "$ZSHRC"
+    # Bat section
+    sed -i '/^# ------------ bat/d' "$ZSHRC"
+    sed -i '/^export BAT_THEME=/d' "$ZSHRC"
+    sed -i '/^alias cat=bat$/d' "$ZSHRC"
 
-# FZF+Eza+Bat section
-sed -i '/^# ---------- fzf with eza and bat/d' "$ZSHRC"
-sed -i '/^export FZF_CTRL_T_OPTS=/d' "$ZSHRC"
-sed -i '/^export FZF_ALT_C_OPTS=/d' "$ZSHRC"
-sed -i '/^# Advanced customization of fzf options/d' "$ZSHRC"
-sed -i '/^# - The first argument to the function is the name/d' "$ZSHRC"
-sed -i '/^# - You should make sure to pass the rest/d' "$ZSHRC"
-# Multi-line function: _fzf_comprun
-sed -i '/^_fzf_comprun()/,/^}/d' "$ZSHRC"
+    # FZF+Eza+Bat section
+    sed -i '/^# ---------- fzf with eza and bat/d' "$ZSHRC"
+    sed -i '/^export FZF_CTRL_T_OPTS=/d' "$ZSHRC"
+    sed -i '/^export FZF_ALT_C_OPTS=/d' "$ZSHRC"
+    sed -i '/^# Advanced customization of fzf options/d' "$ZSHRC"
+    sed -i '/^# - The first argument to the function is the name/d' "$ZSHRC"
+    sed -i '/^# - You should make sure to pass the rest/d' "$ZSHRC"
+    # Multi-line function: _fzf_comprun
+    sed -i '/^_fzf_comprun()/,/^}/d' "$ZSHRC"
 
-# Neovim aliases and editor
-sed -i '/^alias vim="nvim"$/d' "$ZSHRC"
-sed -i '/^alias v="nvim"$/d' "$ZSHRC"
-sed -i '/^export EDITOR=nvim$/d' "$ZSHRC"
-sed -i '/^# export SUDO_EDITOR=\/opt\/nvim/d' "$ZSHRC"
-sed -i '/^export SUDO_EDITOR=\$(which nvim)$/d' "$ZSHRC"
+    # Neovim aliases and editor
+    sed -i '/^alias vim="nvim"$/d' "$ZSHRC"
+    sed -i '/^alias v="nvim"$/d' "$ZSHRC"
+    sed -i '/^export EDITOR=nvim$/d' "$ZSHRC"
+    sed -i '/^# export SUDO_EDITOR=\/opt\/nvim/d' "$ZSHRC"
+    sed -i '/^export SUDO_EDITOR=\$(which nvim)$/d' "$ZSHRC"
 
-# UV completions
-sed -i '/^eval "\$(uvx --generate-shell-completion zsh)"/d' "$ZSHRC"
-sed -i '/^eval "\$(uv generate-shell-completion zsh)"/d' "$ZSHRC"
-sed -i '/^_zsh_cache_eval uvx-completion/d' "$ZSHRC"
-sed -i '/^_zsh_cache_eval uv-completion/d' "$ZSHRC"
-sed -i '/^fpath+=~\/\.zfunc; autoload -Uz compinit; compinit$/d' "$ZSHRC"
+    # UV completions
+    sed -i '/^eval "\$(uvx --generate-shell-completion zsh)"/d' "$ZSHRC"
+    sed -i '/^eval "\$(uv generate-shell-completion zsh)"/d' "$ZSHRC"
+    sed -i '/^_zsh_cache_eval uvx-completion/d' "$ZSHRC"
+    sed -i '/^_zsh_cache_eval uv-completion/d' "$ZSHRC"
+    sed -i '/^fpath+=~\/\.zfunc; autoload -Uz compinit; compinit$/d' "$ZSHRC"
 
-# Yazi function
-sed -i '/^# yazi$/d' "$ZSHRC"
-sed -i '/^function y()/,/^}/d' "$ZSHRC"
+    # Yazi function
+    sed -i '/^# yazi$/d' "$ZSHRC"
+    sed -i '/^function y()/,/^}/d' "$ZSHRC"
 
-# Python PATH fix for neovim
-sed -i '/^# Fix for Neovim when working with managed pythons/d' "$ZSHRC"
-sed -i '/^export PATH=\$(dirname \$(realpath \$(which python3))):$PATH$/d' "$ZSHRC"
-sed -i '/^_python3_path=\$(realpath/d' "$ZSHRC"
-sed -i '/^unset _python3_path$/d' "$ZSHRC"
+    # Python PATH fix for neovim
+    sed -i '/^# Fix for Neovim when working with managed pythons/d' "$ZSHRC"
+    sed -i '/^export PATH=\$(dirname \$(realpath \$(which python3))):$PATH$/d' "$ZSHRC"
+    sed -i '/^_python3_path=\$(realpath/d' "$ZSHRC"
+    sed -i '/^unset _python3_path$/d' "$ZSHRC"
 
-# Collapse blank-line clusters
-sed -i '/^$/N;/^\n$/d' "$ZSHRC"
+    # Collapse blank-line clusters
+    sed -i '/^$/N;/^\n$/d' "$ZSHRC"
 
-ok_changed "Cleaned up old manual config lines"
+    ok_changed "Cleaned up old manual config lines"
 
-# ─── Phase 4: Insert managed block ───────────────────────────────────────────
+    # ─── Phase 4: Insert managed block ───────────────────────────────────────────
 
-info "Phase 4: Insert managed block"
+    info "Phase 4: Insert managed block"
 
-# Insert after source $ZSH/oh-my-zsh.sh
-if grep -q 'source \$ZSH/oh-my-zsh.sh' "$ZSHRC" 2>/dev/null || grep -q 'source $ZSH/oh-my-zsh.sh' "$ZSHRC" 2>/dev/null; then
-    awk -v block="$SHELL_TOOLS_BLOCK" '
+    # Insert after source $ZSH/oh-my-zsh.sh
+    if grep -q 'source \$ZSH/oh-my-zsh.sh' "$ZSHRC" 2>/dev/null || grep -q 'source $ZSH/oh-my-zsh.sh' "$ZSHRC" 2>/dev/null; then
+        awk -v block="$SHELL_TOOLS_BLOCK" '
         /source \$ZSH\/oh-my-zsh\.sh/ || /source \$\{ZSH\}\/oh-my-zsh\.sh/ {
             print
             print ""
@@ -370,13 +370,13 @@ if grep -q 'source \$ZSH/oh-my-zsh.sh' "$ZSHRC" 2>/dev/null || grep -q 'source $
             next
         }
         { print }
-    ' "$ZSHRC" > "${ZSHRC}.tmp" && mv -f "${ZSHRC}.tmp" "$ZSHRC"
-    ok_changed "Inserted mise-shell-tools block after oh-my-zsh source"
-else
-    # Fallback: append to end
-    printf '\n%s\n' "$SHELL_TOOLS_BLOCK" >> "$ZSHRC"
-    ok_changed "Appended mise-shell-tools block to end of .zshrc"
-fi
+    ' "$ZSHRC" >"${ZSHRC}.tmp" && mv -f "${ZSHRC}.tmp" "$ZSHRC"
+        ok_changed "Inserted mise-shell-tools block after oh-my-zsh source"
+    else
+        # Fallback: append to end
+        printf '\n%s\n' "$SHELL_TOOLS_BLOCK" >>"$ZSHRC"
+        ok_changed "Appended mise-shell-tools block to end of .zshrc"
+    fi
 
 # end of block-changed branch
 fi

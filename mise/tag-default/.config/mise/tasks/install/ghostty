@@ -21,17 +21,17 @@ HAS_GRAPHICAL=false
 if [[ -f "$GRAPHICAL_ENV_FILE" ]]; then
     GRAPHICAL_PIN="$(<"$GRAPHICAL_ENV_FILE")"
     case "${GRAPHICAL_PIN,,}" in
-    graphical | yes)
-        HAS_GRAPHICAL=true
-        info "Graphical environment forced via .graphical-env"
-        ;;
-    server | none | no)
-        info "Graphical environment disabled via .graphical-env. Skipping Ghostty install."
-        exit 0
-        ;;
-    *)
-        warn "Unknown .graphical-env value '$GRAPHICAL_PIN', falling through to auto-detection"
-        ;;
+        graphical | yes)
+            HAS_GRAPHICAL=true
+            info "Graphical environment forced via .graphical-env"
+            ;;
+        server | none | no)
+            info "Graphical environment disabled via .graphical-env. Skipping Ghostty install."
+            exit 0
+            ;;
+        *)
+            warn "Unknown .graphical-env value '$GRAPHICAL_PIN', falling through to auto-detection"
+            ;;
     esac
 fi
 
@@ -77,15 +77,15 @@ if [[ "$HAS_GRAPHICAL" == false ]]; then
     printf 'Persist this choice? [g]raphical / [s]erver / Enter to skip: '
     read -r PERSIST_CHOICE
     case "${PERSIST_CHOICE,,}" in
-    g | graphical)
-        printf 'graphical' >"$GRAPHICAL_ENV_FILE"
-        info "Saved .graphical-env = graphical"
-        ;;
-    s | server)
-        printf 'server' >"$GRAPHICAL_ENV_FILE"
-        info "Saved .graphical-env = server (Ghostty will be skipped in future runs)"
-        exit 0
-        ;;
+        g | graphical)
+            printf 'graphical' >"$GRAPHICAL_ENV_FILE"
+            info "Saved .graphical-env = graphical"
+            ;;
+        s | server)
+            printf 'server' >"$GRAPHICAL_ENV_FILE"
+            info "Saved .graphical-env = server (Ghostty will be skipped in future runs)"
+            exit 0
+            ;;
     esac
 fi
 
@@ -131,10 +131,10 @@ printf 'Install method: [d]eb (PPA) / [a]ppimage / [s]ource / s[n]ap: '
 read -r INSTALL_METHOD
 
 case "${INSTALL_METHOD,,}" in
-    d | deb)      INSTALL_METHOD="deb" ;;
+    d | deb) INSTALL_METHOD="deb" ;;
     a | appimage) INSTALL_METHOD="appimage" ;;
-    s | source)   INSTALL_METHOD="source" ;;
-    n | snap)     INSTALL_METHOD="snap" ;;
+    s | source) INSTALL_METHOD="source" ;;
+    n | snap) INSTALL_METHOD="snap" ;;
     *)
         fail "Unrecognized install method '$INSTALL_METHOD'. Use 'd' for deb, 'a' for appimage, 's' for source, or 'n' for snap."
         ;;
@@ -172,9 +172,9 @@ elif [[ "$INSTALL_METHOD" == "appimage" ]]; then
 
     ARCH=$(uname -m)
     case "$ARCH" in
-        x86_64)  APPIMAGE_ARCH="x86_64" ;;
+        x86_64) APPIMAGE_ARCH="x86_64" ;;
         aarch64) APPIMAGE_ARCH="aarch64" ;;
-        *)       fail "Unsupported architecture for AppImage: $ARCH" ;;
+        *) fail "Unsupported architecture for AppImage: $ARCH" ;;
     esac
 
     APPIMAGE_URL=$(curl -fsSL "https://api.github.com/repos/pkgforge-dev/ghostty-appimage/releases/latest" \

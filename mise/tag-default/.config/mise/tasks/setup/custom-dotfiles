@@ -186,9 +186,12 @@ add_custom_package() {
         printf 'Tag this config as? [d]efault / [m]achine tag (%s) / Enter for default: ' "$DEVICE_TAG"
         read -r tag_choice
         case "${tag_choice,,}" in
-        m | machine) pkg_tag="$DEVICE_TAG" ;;
-        d | default | "") pkg_tag="default" ;;
-        *) warn "Unrecognized input, using default"; pkg_tag="default" ;;
+            m | machine) pkg_tag="$DEVICE_TAG" ;;
+            d | default | "") pkg_tag="default" ;;
+            *)
+                warn "Unrecognized input, using default"
+                pkg_tag="default"
+                ;;
         esac
     fi
 
@@ -217,64 +220,67 @@ add_custom_package() {
         read -r dir_mode
 
         case "${dir_mode,,}" in
-        p | partial)
-            pkg_type="partial"
-            recurse_dirs_value="$rel_path"
+            p | partial)
+                pkg_type="partial"
+                recurse_dirs_value="$rel_path"
 
-            # List directory contents for selection
-            local -a entries=()
-            while IFS= read -r entry; do
-                entries+=("$entry")
-            done < <(ls -A1 "$source_path")
+                # List directory contents for selection
+                local -a entries=()
+                while IFS= read -r entry; do
+                    entries+=("$entry")
+                done < <(ls -A1 "$source_path")
 
-            if ((${#entries[@]} == 0)); then
-                warn "Directory is empty"
-                return 1
-            fi
-
-            info "Contents of $source_path:"
-            for i in "${!entries[@]}"; do
-                local marker=""
-                if [[ -d "$source_path/${entries[$i]}" ]]; then
-                    marker="/"
+                if ((${#entries[@]} == 0)); then
+                    warn "Directory is empty"
+                    return 1
                 fi
-                printf '  %d) %s%s\n' "$((i + 1))" "${entries[$i]}" "$marker"
-            done
-            printf 'Enter numbers to include (space-separated): '
-            read -r selections
 
-            [[ -z "$selections" ]] && { warn "No items selected"; return 1; }
+                info "Contents of $source_path:"
+                for i in "${!entries[@]}"; do
+                    local marker=""
+                    if [[ -d "$source_path/${entries[$i]}" ]]; then
+                        marker="/"
+                    fi
+                    printf '  %d) %s%s\n' "$((i + 1))" "${entries[$i]}" "$marker"
+                done
+                printf 'Enter numbers to include (space-separated): '
+                read -r selections
 
-            # Create package directory with tagged stow layout
-            local pkg_dir="$CUSTOM_DIR/$pkg_name/tag-$pkg_tag/$rel_path"
-            mkdir -p "$pkg_dir"
+                [[ -z "$selections" ]] && {
+                    warn "No items selected"
+                    return 1
+                }
 
-            for sel in $selections; do
-                if [[ "$sel" =~ ^[0-9]+$ ]] && ((sel >= 1 && sel <= ${#entries[@]})); then
-                    local item="${entries[$((sel - 1))]}"
-                    cp -a "$source_path/$item" "$pkg_dir/$item"
-                    info "  Added: $item"
-                else
-                    warn "  Invalid selection: $sel"
-                fi
-            done
-            ;;
-        f | full | "")
-            pkg_type="full"
-            # Create package directory with tagged stow layout
-            local pkg_dir="$CUSTOM_DIR/$pkg_name/tag-$pkg_tag/$rel_path"
-            mkdir -p "$(dirname "$pkg_dir")"
-            cp -a "$source_path" "$pkg_dir"
-            info "  Copied full directory: $source_path"
-            ;;
-        *)
-            warn "Unrecognized input, defaulting to full"
-            pkg_type="full"
-            local pkg_dir="$CUSTOM_DIR/$pkg_name/tag-$pkg_tag/$rel_path"
-            mkdir -p "$(dirname "$pkg_dir")"
-            cp -a "$source_path" "$pkg_dir"
-            info "  Copied full directory: $source_path"
-            ;;
+                # Create package directory with tagged stow layout
+                local pkg_dir="$CUSTOM_DIR/$pkg_name/tag-$pkg_tag/$rel_path"
+                mkdir -p "$pkg_dir"
+
+                for sel in $selections; do
+                    if [[ "$sel" =~ ^[0-9]+$ ]] && ((sel >= 1 && sel <= ${#entries[@]})); then
+                        local item="${entries[$((sel - 1))]}"
+                        cp -a "$source_path/$item" "$pkg_dir/$item"
+                        info "  Added: $item"
+                    else
+                        warn "  Invalid selection: $sel"
+                    fi
+                done
+                ;;
+            f | full | "")
+                pkg_type="full"
+                # Create package directory with tagged stow layout
+                local pkg_dir="$CUSTOM_DIR/$pkg_name/tag-$pkg_tag/$rel_path"
+                mkdir -p "$(dirname "$pkg_dir")"
+                cp -a "$source_path" "$pkg_dir"
+                info "  Copied full directory: $source_path"
+                ;;
+            *)
+                warn "Unrecognized input, defaulting to full"
+                pkg_type="full"
+                local pkg_dir="$CUSTOM_DIR/$pkg_name/tag-$pkg_tag/$rel_path"
+                mkdir -p "$(dirname "$pkg_dir")"
+                cp -a "$source_path" "$pkg_dir"
+                info "  Copied full directory: $source_path"
+                ;;
         esac
     else
         # Single file
@@ -548,20 +554,20 @@ while true; do
     read -r action
 
     case "${action,,}" in
-    a | add)
-        add_custom_package || true
-        read_custom_packages  # refresh arrays
-        ;;
-    r | remove)
-        remove_custom_package || true
-        read_custom_packages  # refresh arrays
-        ;;
-    "")
-        break
-        ;;
-    *)
-        warn "Unrecognized input '$action'"
-        ;;
+        a | add)
+            add_custom_package || true
+            read_custom_packages # refresh arrays
+            ;;
+        r | remove)
+            remove_custom_package || true
+            read_custom_packages # refresh arrays
+            ;;
+        "")
+            break
+            ;;
+        *)
+            warn "Unrecognized input '$action'"
+            ;;
     esac
 done
 

@@ -10,8 +10,8 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../lib/helpers.sh"
 source /etc/os-release
 
 INSTALLED_VERSION="$(dpkg-query -W -f='${Version}' veracrypt-console 2>/dev/null \
-  || dpkg-query -W -f='${Version}' veracrypt 2>/dev/null \
-  || true)"
+    || dpkg-query -W -f='${Version}' veracrypt 2>/dev/null \
+    || true)"
 OS_VERSION="$VERSION_ID"
 ARCH="$(dpkg --print-architecture)"
 
@@ -19,11 +19,11 @@ RELEASE_JSON="$(curl -sf "https://api.github.com/repos/veracrypt/VeraCrypt/relea
 TAG="$(echo "$RELEASE_JSON" | python3 -c "import json,sys; print(json.load(sys.stdin)['tag_name'])")"
 VERSION="${TAG#VeraCrypt_}"
 
-INSTALLED_UPSTREAM="${INSTALLED_VERSION%%-*}"   # e.g. "1.26.24-1~ubuntu22.04-1" → "1.26.24"
+INSTALLED_UPSTREAM="${INSTALLED_VERSION%%-*}" # e.g. "1.26.24-1~ubuntu22.04-1" → "1.26.24"
 
 if [[ "$INSTALLED_UPSTREAM" == "$VERSION" ]]; then
-  ok "VeraCrypt $VERSION already installed"
-  exit 0
+    ok "VeraCrypt $VERSION already installed"
+    exit 0
 fi
 
 ASSET_NAME="veracrypt-console-${VERSION}-Ubuntu-${OS_VERSION}-${ARCH}.deb"
@@ -36,7 +36,7 @@ print(matches[0] if matches else '')
 ")"
 
 if [ -z "$ASSET_URL" ]; then
-  fail "No matching asset found: $ASSET_NAME"
+    fail "No matching asset found: $ASSET_NAME"
 fi
 
 TMPDIR="$(mktemp -d)"
@@ -46,14 +46,14 @@ info "Downloading $ASSET_NAME..."
 curl -fL -o "$TMPDIR/$ASSET_NAME" "$ASSET_URL"
 info "Installing (requires sudo)..."
 if ! sudo apt-get install -y -f "$TMPDIR/$ASSET_NAME"; then
-  warn "Failed to install VeraCrypt. Install manually: $ASSET_URL"
-  exit 0
+    warn "Failed to install VeraCrypt. Install manually: $ASSET_URL"
+    exit 0
 fi
 ok_changed "VeraCrypt $VERSION installed successfully"
 
 # "veracrypt" (no -console suffix) is the legacy package name; safe to purge without
 # touching the newly installed "veracrypt-console".
 if dpkg-query -W veracrypt &>/dev/null 2>&1; then
-  info "Removing legacy veracrypt package..."
-  sudo apt-get purge -y veracrypt
+    info "Removing legacy veracrypt package..."
+    sudo apt-get purge -y veracrypt
 fi

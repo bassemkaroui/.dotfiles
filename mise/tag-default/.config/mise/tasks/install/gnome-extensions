@@ -22,17 +22,17 @@ HAS_GRAPHICAL=false
 if [[ -f "$GRAPHICAL_ENV_FILE" ]]; then
     GRAPHICAL_PIN="$(<"$GRAPHICAL_ENV_FILE")"
     case "${GRAPHICAL_PIN,,}" in
-    graphical | yes)
-        HAS_GRAPHICAL=true
-        info "Graphical environment forced via .graphical-env"
-        ;;
-    server | none | no)
-        info "Graphical environment disabled via .graphical-env. Skipping GNOME extensions install."
-        exit 0
-        ;;
-    *)
-        warn "Unknown .graphical-env value '$GRAPHICAL_PIN', falling through to auto-detection"
-        ;;
+        graphical | yes)
+            HAS_GRAPHICAL=true
+            info "Graphical environment forced via .graphical-env"
+            ;;
+        server | none | no)
+            info "Graphical environment disabled via .graphical-env. Skipping GNOME extensions install."
+            exit 0
+            ;;
+        *)
+            warn "Unknown .graphical-env value '$GRAPHICAL_PIN', falling through to auto-detection"
+            ;;
     esac
 fi
 
@@ -78,15 +78,15 @@ if [[ "$HAS_GRAPHICAL" == false ]]; then
     printf 'Persist this choice? [g]raphical / [s]erver / Enter to skip: '
     read -r PERSIST_CHOICE
     case "${PERSIST_CHOICE,,}" in
-    g | graphical)
-        printf 'graphical' >"$GRAPHICAL_ENV_FILE"
-        info "Saved .graphical-env = graphical"
-        ;;
-    s | server)
-        printf 'server' >"$GRAPHICAL_ENV_FILE"
-        info "Saved .graphical-env = server (GNOME extensions will be skipped in future runs)"
-        exit 0
-        ;;
+        g | graphical)
+            printf 'graphical' >"$GRAPHICAL_ENV_FILE"
+            info "Saved .graphical-env = graphical"
+            ;;
+        s | server)
+            printf 'server' >"$GRAPHICAL_ENV_FILE"
+            info "Saved .graphical-env = server (GNOME extensions will be skipped in future runs)"
+            exit 0
+            ;;
     esac
 fi
 
