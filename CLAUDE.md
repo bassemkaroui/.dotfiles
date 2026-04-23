@@ -63,6 +63,7 @@ stow -d <package> -t ~ tag-laptop          # Deploy a device-specific variant (e
 | Manage exclusions       | `mise run setup:exclude`         |
 | Manage custom configs   | `mise run setup:custom-dotfiles` |
 | Deploy/redeploy configs | `mise run setup:dotfiles`        |
+| Install git signing (if GPG key present) | `mise run setup:git-signing`     |
 | Update tmux             | `mise run update:oh-my-tmux`     |
 | Update GNOME ext manifest | `mise run update:gnome-extensions` |
 | COSMIC DE setup         | `mise run setup:cosmic`          |

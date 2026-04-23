@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 #MISE description="Deploy dotfiles via GNU Stow (clones repo if missing, resolves device tag)"
 #MISE raw=true
+#MISE depends_post=["setup:git-signing"]
 set -eo pipefail
 
 # ─── Helpers ───────────────────────────────────────────────────────────────────

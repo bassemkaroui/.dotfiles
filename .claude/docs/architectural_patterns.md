@@ -104,6 +104,46 @@ After resolution, the tag is persisted to `.dotfiles/.device-tag` (git-ignored).
 
 ---
 
+## Host-Specific Overlays via `include-local`
+
+**Pattern:** For files that need only a few host-specific lines on top of an otherwise-shared config, commit the shared part and have it `include` a gitignored `~/.<name>.local` sibling. The tool silently skips the include if the file is absent, so a bare machine works out of the box and gains the overlay only when the local file is populated.
+
+**Why not tags?** Tag-based variants (above) require duplicating the whole file per variant. When 95% of the content is shared and only 5% varies, `include-local` avoids the duplication and keeps the shared content authoritative.
+
+**Implementation (git signing, the reference case):**
+```gitconfig
+# ~/.gitconfig (committed, shared)
+[user]
+  name = Bassem Karoui
+  email = bassem.karoui1@gmail.com
+# ... all shared settings ...
+[include]
+  path = ~/.gitconfig.local      # silently skipped if missing
+```
+```gitconfig
+# ~/.gitconfig.local (generated, never committed, populated only when the
+# required resource — here, a GPG secret key — is available on this machine)
+[user]
+  signingkey = F7FA37710715D6E5
+[commit]
+  gpgsign = true
+[tag]
+  gpgSign = true
+```
+
+**Bootstrap flow:**
+1. Ship a committed template `<name>.local.example` alongside the shared file (stowed normally, becomes `~/<name>.local.example`).
+2. A mise task (`setup:git-signing` is the reference) detects whether the prerequisite is satisfied (e.g., `gpg --list-secret-keys <id>`) and copies the template into place as `~/<name>.local` — only if it doesn't already exist (idempotent, never clobbers manual edits).
+3. Wire the task via `#MISE depends_post=["setup:<name>-local"]` on `setup:dotfiles` so re-stowing automatically re-runs the install check.
+
+**Which tools support this natively:** git (`[include]`), ssh (`Include ~/.ssh/config.d/*`), zsh/bash (`[[ -f ~/.zshrc.local ]] && source ~/.zshrc.local`), tmux (`source-file -q`). For tools without native include support, either switch to tag-based variants or introduce a templating layer (not currently used in this repo).
+
+**Defensive gitignore:** `*.local` is ignored in `.dotfiles-custom/.gitignore` so that a stray `.local` file placed inside a package directory by mistake doesn't get committed.
+
+**When applying:** Use when a file's machine-specific variation is small (a handful of keys/lines) and the underlying tool supports includes. For whole-file variance (e.g., `ssh/tag-laptop/.ssh/config` vs `ssh/tag-desktop/.ssh/config`), keep using tags.
+
+---
+
 ## Graphical Environment Detection
 
 **Pattern:** GUI tool installation (e.g., Ghostty, GNOME extensions) checks for a graphical environment rather than relying on device type. This is separate from the tag system.

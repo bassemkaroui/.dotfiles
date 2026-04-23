@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+#MISE description="Install ~/.gitconfig.local with GPG signing block if the configured key is present"
+#MISE raw=true
+set -eo pipefail
+
+# ─── Helpers ───────────────────────────────────────────────────────────────────
+
+TASK_NAME="setup:git-signing"
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../lib/helpers.sh"
+
+EXAMPLE="$HOME/.gitconfig.local.example"
+TARGET="$HOME/.gitconfig.local"
+
+if [[ ! -f "$EXAMPLE" ]]; then
+    warn "$EXAMPLE not found — deploy the git custom package first (mise run setup:custom-dotfiles)"
+    exit 0
+fi
+
+KEY_ID="$(git config --file "$EXAMPLE" --get user.signingkey 2>/dev/null || true)"
+if [[ -z "$KEY_ID" ]]; then
+    warn "user.signingkey not set in $EXAMPLE — nothing to do"
+    exit 0
+fi
+
+if ! gpg --list-secret-keys "$KEY_ID" &>/dev/null; then
+    warn "GPG secret key $KEY_ID not found — import it and re-run: mise run setup:git-signing"
+    exit 0
+fi
+
+if [[ -e "$TARGET" ]]; then
+    ok "~/.gitconfig.local already present, leaving alone"
+    exit 0
+fi
+
+cp "$EXAMPLE" "$TARGET"
+ok_changed "Installed ~/.gitconfig.local (signing enabled with $KEY_ID)"
