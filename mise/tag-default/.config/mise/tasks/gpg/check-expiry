@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+#MISE description="Show expiry status of your GPG secret keys (warns within 30 days)"
+#MISE raw=true
+set -eo pipefail
+
+TASK_NAME="gpg:check-expiry"
+LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../lib"
+# shellcheck source=../lib/helpers.sh
+source "$LIB_DIR/helpers.sh"
+# shellcheck source=../lib/gpg_helpers.sh
+source "$LIB_DIR/gpg_helpers.sh"
+
+require_gpg
+
+mapfile -t rows < <(secret_keys_stream)
+if ((${#rows[@]} == 0)); then
+    warn "No secret keys found in keyring"
+    exit 0
+fi
+
+worst_state="ok"
+promote_state() {
+    local s="$1"
+    case "$worst_state:$s" in
+        *:expired) worst_state="expired" ;;
+        ok:warn | none:warn) worst_state="warn" ;;
+    esac
+}
+
+print_expiry_header 0
+for row in "${rows[@]}"; do
+    print_expiry_row "$row" 0
+    epoch="$(printf '%s' "$row" | awk -F"$GPG_FS" '{print $5}')"
+    days="$(days_remaining "$epoch")"
+    promote_state "$(expiry_state "$days")"
+done
+
+case "$worst_state" in
+    expired) warn "One or more keys have expired — run: mise run gpg:extend-expiry" ;;
+    warn) warn "One or more keys expire within ${GPG_EXPIRY_WARN_DAYS} days — run: mise run gpg:extend-expiry" ;;
+    *) ok "All secret keys are valid beyond ${GPG_EXPIRY_WARN_DAYS} days" ;;
+esac

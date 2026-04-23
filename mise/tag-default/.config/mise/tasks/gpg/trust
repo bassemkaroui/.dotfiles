@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+#MISE description="Set ownertrust=ultimate on all own secret keys (idempotent)"
+#MISE raw=true
+set -eo pipefail
+
+TASK_NAME="gpg:trust"
+LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../lib"
+# shellcheck source=../lib/helpers.sh
+source "$LIB_DIR/helpers.sh"
+# shellcheck source=../lib/gpg_helpers.sh
+source "$LIB_DIR/gpg_helpers.sh"
+
+require_gpg
+
+mapfile -t primaries < <(primary_fprs)
+if ((${#primaries[@]} == 0)); then
+    warn "No secret keys found — nothing to trust"
+    exit 0
+fi
+
+# Build a map of existing ownertrust levels (fpr -> level).
+declare -A current_trust
+while IFS=: read -r fpr level _; do
+    [[ -z "$fpr" || "$fpr" =~ ^# ]] && continue
+    current_trust["$fpr"]="$level"
+done < <(gpg --export-ownertrust 2>/dev/null)
+
+changes=0
+for fpr in "${primaries[@]}"; do
+    if [[ "${current_trust[$fpr]:-}" == "6" ]]; then
+        ok "$(short_fpr "$fpr") already ultimate"
+        continue
+    fi
+    printf '%s:6:\n' "$fpr" | gpg --import-ownertrust 2>/dev/null
+    ok_changed "$(short_fpr "$fpr") set to ultimate"
+    ((changes++))
+done
+
+if ((changes == 0)); then
+    ok "No ownertrust changes needed"
+fi

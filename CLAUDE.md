@@ -64,6 +64,13 @@ stow -d <package> -t ~ tag-laptop          # Deploy a device-specific variant (e
 | Manage custom configs   | `mise run setup:custom-dotfiles` |
 | Deploy/redeploy configs | `mise run setup:dotfiles`        |
 | Install git signing (if GPG key present) | `mise run setup:git-signing`     |
+| Check GPG key expiry    | `mise run gpg:check-expiry`      |
+| Extend GPG key expiry (default 1y) | `mise run gpg:extend-expiry [--period <value>]` |
+| List GPG secret keys    | `mise run gpg:list`              |
+| Back up GPG keyring (encrypted) | `mise run gpg:backup`    |
+| Restore a GPG backup (latest if --archive omitted) | `mise run gpg:restore [--archive <path>]` |
+| Set ownertrust=ultimate on own keys | `mise run gpg:trust`     |
+| Run CI-equivalent lint locally | `mise run lint`           |
 | Update tmux             | `mise run update:oh-my-tmux`     |
 | Update GNOME ext manifest | `mise run update:gnome-extensions` |
 | COSMIC DE setup         | `mise run setup:cosmic`          |
@@ -96,6 +103,8 @@ See `.claude/docs/architectural_patterns.md` for detailed pattern documentation.
 ## Working with Claude
 
 **Before starting any non-trivial task**, create a task list with `TaskCreate` to track the steps. Mark each task `in_progress` when you begin it and `completed` when done.
+
+**Before committing or pushing any change under `.mise/tasks/` or `mise/tag-default/.config/mise/tasks/`, run `mise run lint`.** It runs `shellcheck --severity=warning` and `shfmt -d -i 4 -ci -bn` against the exact same file set as `.github/workflows/ci.yml`, so passing locally means passing in CI. The task auto-downloads the CI-pinned `shfmt` (v3.10.0) to `~/.cache/dotfiles-lint/` on first run. **Never push without a clean `mise run lint`.** If a lint fails on a message you intended to contain literal tokens like `~/...` (tilde as display text, not a path), suppress with an inline `# shellcheck disable=<code>` comment that names the rule and explains why — don't rewrite the message.
 
 **Always include a final task in the list:** "Update docs if needed" — this must be the last task before closing out. When you reach it, reflect on whether the changes affect any of:
 

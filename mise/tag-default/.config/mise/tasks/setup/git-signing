@@ -28,6 +28,7 @@ if ! gpg --list-secret-keys "$KEY_ID" &>/dev/null; then
 fi
 
 if [[ -e "$TARGET" ]]; then
+    # shellcheck disable=SC2088  # tilde is literal display text, not a path to expand
     ok "~/.gitconfig.local already present, leaving alone"
     exit 0
 fi

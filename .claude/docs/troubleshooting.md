@@ -239,6 +239,23 @@ stow -D -d git -t ~ tag-default     # Unlink
 stow -d git -t ~ tag-default        # Relink (redeploy config)
 ```
 
+### GPG Key Expired or Expiring Soon
+
+**Symptom:** `git commit` fails with `gpg: signing failed: No secret key` or `key … has expired`, or you want to check status before it bites.
+
+**Check:**
+```bash
+mise run gpg:check-expiry     # Table of all secret keys with days-remaining
+```
+
+**Fix (extend primary + all subkeys):**
+```bash
+mise run gpg:extend-expiry                    # Default: +1 year
+mise run gpg:extend-expiry --period 2y        # Custom period (Nd/Nw/Nm/Ny, ISO date, or 0 for never)
+```
+
+The task uses `gpg --quick-set-expire` under the hood — no interactive `--edit-key` session needed. After it runs, re-check with `gpg:check-expiry` and push updated public keys to any keyservers you use.
+
 ### SSH Keys Not Found
 
 **Check:**

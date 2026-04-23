@@ -204,6 +204,23 @@ stow -d gh-dash -t ~ tag-default
 - TTY detection handles multi-user environments
 - Pinentry configured for graphical password entry
 
+### GPG Key Maintenance
+
+Mise tasks under the `gpg:` namespace wrap common secret-key lifecycle operations. All of them operate on **secret keys only** (keys you hold the private half of) and share a parser library at `mise/.config/mise/tasks/lib/gpg_helpers.sh`.
+
+| Task                   | Purpose                                                                             |
+| ---------------------- | ----------------------------------------------------------------------------------- |
+| `gpg:check-expiry`     | Tabular expiry report for every secret key + subkey; warns within `GPG_EXPIRY_WARN_DAYS` (default 30). Non-gating (always exits 0). |
+| `gpg:list`             | Like `check-expiry` plus a capabilities column (`scESC`, `e`, …).                    |
+| `gpg:extend-expiry`    | Non-interactive replacement for the manual `gpg --edit-key … expire` dance. Default period `1y`; override via `mise run gpg:extend-expiry --period 2y` (also accepts `Nd`/`Nw`/`Nm`, ISO dates, or `0` for never). Extends the primary and **all** subkeys in one go, with a confirmation prompt. Flags are declared with mise's `#USAGE` syntax, so `mise run gpg:extend-expiry --help` renders the spec automatically. |
+| `gpg:backup`           | Exports secret keys, public keys, and ownertrust; tars them; encrypts with AES256 (symmetric). Output: `${GPG_BACKUP_DIR:-~/.gnupg-backups}/gpg-backup-<UTC timestamp>.tar.gpg`. Does **not** generate revocation certificates — use `gpg --gen-revoke <fpr>` separately. |
+| `gpg:restore`          | Usage: `mise run gpg:restore [--archive <path>]`. Decrypts a backup archive, previews the keys it contains, then imports secrets + ownertrust after a y/N confirm. When `--archive` is omitted, the task auto-selects the newest `gpg-backup-*.tar.gpg` in `$GPG_BACKUP_DIR` (by UTC timestamp in the filename) and logs which one it picked before the confirm. |
+| `gpg:trust`            | Sets ownertrust to ultimate (`6`) on all own primary keys. Idempotent — re-runs show `[ OK ]` with no change marker once trust is already set. |
+
+**Environment overrides:**
+- `GPG_EXPIRY_WARN_DAYS` — threshold (in days) at which `check-expiry` / `list` color a key yellow instead of green.
+- `GPG_BACKUP_DIR` — output directory for `gpg:backup` archives (default `~/.gnupg-backups`, created with `chmod 700`).
+
 ### SSH Keys
 
 **Config location:** `ssh/tag-laptop/.ssh/config` or `ssh/tag-desktop/.ssh/config`

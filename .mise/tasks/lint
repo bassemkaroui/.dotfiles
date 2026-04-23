@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+#MISE description="Run CI-equivalent lint locally (shellcheck + shfmt on every mise task)"
+#MISE raw=true
+set -eo pipefail
+
+TASK_NAME="lint"
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../.."
+# shellcheck source=../../mise/tag-default/.config/mise/tasks/lib/helpers.sh
+source "$REPO_ROOT/mise/tag-default/.config/mise/tasks/lib/helpers.sh"
+
+# File discovery must exactly mirror .github/workflows/ci.yml — anything scanned
+# by CI must be scanned here.
+mapfile -t FILES < <(
+    find "$REPO_ROOT/.mise/tasks" "$REPO_ROOT/mise/tag-default/.config/mise/tasks" \
+        -type f \
+        \( -name "*.sh" -o ! -name "*.*" \) \
+        -not -path "*/.git/*"
+)
+if ((${#FILES[@]} == 0)); then
+    fail "No task files discovered — are you running from the repo root?"
+fi
+info "Linting ${#FILES[@]} files"
+
+# ─── shellcheck ───────────────────────────────────────────────────────────────
+
+if ! command -v shellcheck >/dev/null 2>&1; then
+    fail "shellcheck not found — install it (e.g. 'sudo apt-get install shellcheck') and retry"
+fi
+
+if shellcheck --severity=warning "${FILES[@]}"; then
+    ok "shellcheck passed"
+else
+    fail "shellcheck reported issues (see output above)"
+fi
+
+# ─── shfmt ────────────────────────────────────────────────────────────────────
+
+# CI pins shfmt v3.10.0; we cache the same binary locally so `mise run lint`
+# behaves identically offline after the first run.
+SHFMT_VERSION="v3.10.0"
+SHFMT_CACHE="$HOME/.cache/dotfiles-lint"
+SHFMT_BIN="$SHFMT_CACHE/shfmt-${SHFMT_VERSION}"
+
+SHFMT=""
+if command -v shfmt >/dev/null 2>&1; then
+    SHFMT="$(command -v shfmt)"
+elif [[ -x "$SHFMT_BIN" ]]; then
+    SHFMT="$SHFMT_BIN"
+else
+    info "shfmt $SHFMT_VERSION not on PATH — downloading to $SHFMT_BIN"
+    mkdir -p "$SHFMT_CACHE"
+    arch="$(uname -m)"
+    case "$arch" in
+        x86_64) asset="linux_amd64" ;;
+        aarch64 | arm64) asset="linux_arm64" ;;
+        *) fail "Unsupported arch for shfmt auto-download: $arch" ;;
+    esac
+    if ! curl -fsSL -o "$SHFMT_BIN" \
+        "https://github.com/mvdan/sh/releases/download/${SHFMT_VERSION}/shfmt_${SHFMT_VERSION}_${asset}"; then
+        fail "Could not download shfmt — install it manually and retry"
+    fi
+    chmod +x "$SHFMT_BIN"
+    SHFMT="$SHFMT_BIN"
+fi
+
+if "$SHFMT" -d -i 4 -ci -bn "${FILES[@]}"; then
+    ok "shfmt passed"
+else
+    fail "shfmt reported formatting diffs (apply with: $SHFMT -w -i 4 -ci -bn <file>)"
+fi
+
+ok "All lints passed — safe to push"
