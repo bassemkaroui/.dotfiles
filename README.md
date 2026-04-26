@@ -15,7 +15,6 @@ Personal dotfiles managed with [GNU Stow](https://www.gnu.org/software/stow/) an
    ```bash
    git clone --recursive https://github.com/bassemkaroui/.dotfiles.git ~/.dotfiles
    cd ~/.dotfiles && mise trust
-   cd ~/.dotfiles/tmux/.tmux && git checkout master && cd ~/.dotfiles
    git config submodule.recurse true
    ```
 
