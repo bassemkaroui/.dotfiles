@@ -13,7 +13,7 @@
 - `ai.toml` — AI agent tooling (claude, sandbox-runtime)
 - `net.toml` — networking (tailscale)
 
-Users can opt out of any conf file on a given machine via `.mise-conf-exclude` (managed interactively by `mise run setup:mise-conf-exclude`). Excluded files are never symlinked into `~/.config/mise/conf.d/`, so `mise install` skips those tool groups entirely.
+Users can opt out of any conf file on a given machine via `.mise-conf-exclude`. The prompt runs as Step 1.5 of `mise run init` — *before* mise is stowed — so excluded files are never symlinked into `~/.config/mise/conf.d/`, and the subsequent `mise install` (run during `bootstrap`) skips those tool groups entirely. The same exclude task is re-runnable later via `mise run setup:mise-conf-exclude` (follow with `mise run setup:dotfiles` to re-stow). `runtime.toml` is protected: it's hidden from the exclude UI and silently dropped from `.mise-conf-exclude` if hand-edited in, because runtimes are pre-installed via `bootstrap`'s `install:runtimes` dependency before the body even runs.
 
 **How it works:**
 - Mise manages multiple versions per runtime; default versions defined in `runtime.toml`
@@ -188,6 +188,7 @@ stow -d gh-dash -t ~ tag-default
 - Instant prompt (cached) for fast startup
 - Font-dependent rendering (requires Nerd Font)
 - Customizable via `~/.p10k.zsh`
+- Per-machine tweaks (e.g. OS icon via `mise run setup:p10k-icon`) live in `~/.p10k.local.zsh`, sourced from `~/.zshrc` *after* `~/.p10k.zsh` so they survive `p10k configure` regenerations and don't break the stow symlink to `~/.p10k.zsh`.
 
 **Tmux plugins:**
 - Managed by oh-my-tmux submodule

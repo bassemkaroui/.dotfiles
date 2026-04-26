@@ -6,13 +6,13 @@ set -eo pipefail
 TASK_NAME="setup:p10k-icon"
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../lib/helpers.sh"
 
-info "OS icon in p10k"
-if [[ ! -e "$HOME/.p10k.zsh" && ! -L "$HOME/.p10k.zsh" ]]; then
-    # shellcheck disable=SC2088 # user-visible path in a display string
-    info "Skipping — ~/.p10k.zsh not found. Stow the p10k package or run 'p10k configure' first."
-    exit 0
-fi
+# The icon override lives in ~/.p10k.local.zsh, sourced by ~/.zshrc *after*
+# ~/.p10k.zsh. Writing here (instead of editing ~/.p10k.zsh) keeps the stowed
+# .p10k.zsh symlink intact across runs and survives `p10k configure`
+# regenerations of the main file.
+P10K_LOCAL="$HOME/.p10k.local.zsh"
 
+info "OS icon in p10k"
 printf 'Would you like to change the OS icon in p10k? (y/N): '
 read -r CHANGE_ICON
 if [[ ! "$CHANGE_ICON" =~ ^[Yy]$ ]]; then
@@ -28,31 +28,21 @@ read -r NEW_ICON
     exit 0
 }
 
-if ! prepare_p10k_file; then
-    warn "Cannot modify p10k config"
-    exit 0
+NEW_LINE="typeset -g POWERLEVEL9K_OS_ICON_CONTENT_EXPANSION='${NEW_ICON}'"
+
+if [[ -f "$P10K_LOCAL" ]] \
+    && grep -q '^[[:space:]]*typeset -g POWERLEVEL9K_OS_ICON_CONTENT_EXPANSION=' "$P10K_LOCAL"; then
+    tmpfile="$(mktemp)"
+    awk -v repl="$NEW_LINE" '
+        /^[[:space:]]*typeset -g POWERLEVEL9K_OS_ICON_CONTENT_EXPANSION=/ { print repl; next }
+        { print }
+    ' "$P10K_LOCAL" >"$tmpfile" && mv -f "$tmpfile" "$P10K_LOCAL"
+else
+    if [[ ! -f "$P10K_LOCAL" ]]; then
+        printf '# Per-machine p10k overrides (gitignored, sourced from ~/.zshrc)\n' \
+            >"$P10K_LOCAL"
+    fi
+    printf '%s\n' "$NEW_LINE" >>"$P10K_LOCAL"
 fi
 
-# Write to the resolved target if custom, otherwise ~/.p10k.zsh
-P10K_FILE="${P10K_CUSTOM_TARGET:-$HOME/.p10k.zsh}"
-if [[ ! -f "$P10K_FILE" ]]; then
-    warn ".p10k.zsh not found — run p10k configure first"
-    exit 0
-fi
-
-# Replace CONTENT_EXPANSION in-place (don't depend on BACKGROUND existing)
-awk -v icon="$NEW_ICON" '
-    /POWERLEVEL9K_OS_ICON_CONTENT_EXPANSION/ {
-        match($0, /^[[:space:]]*/);
-        indent = substr($0, RSTART, RLENGTH);
-        print indent "typeset -g POWERLEVEL9K_OS_ICON_CONTENT_EXPANSION=\047" icon "\047";
-        found = 1;
-        next
-    }
-    { print }
-    END {
-        if (!found) print "WARNING: POWERLEVEL9K_OS_ICON_CONTENT_EXPANSION not found in .p10k.zsh" > "/dev/stderr"
-    }
-' "$P10K_FILE" >"${P10K_FILE}.tmp" && mv -f "${P10K_FILE}.tmp" "$P10K_FILE"
-ok_changed "OS icon updated in .p10k.zsh"
-sync_custom_p10k
+ok_changed "OS icon override written to $P10K_LOCAL"

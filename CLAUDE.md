@@ -43,7 +43,7 @@ A modular dotfiles management system using **GNU Stow** for clean symlink-based 
 ```bash
 git clone --recursive https://github.com/bassemkaroui/.dotfiles.git ~/.dotfiles
 cd ~/.dotfiles
-mise run init           # Installs stow, deploys mise config
+mise run init           # Installs stow, prompts for mise conf.d exclusions, deploys mise config
 mise run bootstrap      # Full machine setup
 ```
 
@@ -86,7 +86,7 @@ stow -d <package> -t ~ tag-laptop          # Deploy a device-specific variant (e
 - **Uniform tag layout:** All packages use `tag-*` subdirectories (e.g. `bash/tag-default/`; a device-specific variant would live at `<package>/tag-laptop/`). Deployed based on `.device-tag` with fallback to `tag-default/`
 - **Graphical detection:** Ghostty and GNOME extensions installation checks for graphical environment (`$DISPLAY`, `$WAYLAND_DISPLAY`, etc.) instead of device type. Override via `.graphical-env`
 - **Desktop environment detection:** DE-specific packages (GNOME themes, extensions) are auto-excluded when not on the matching DE. Detection via `.desktop-env` override → `$XDG_CURRENT_DESKTOP` → binary/directory fallback. Helpers: `is_gnome()`, `is_cosmic()` in `helpers.sh`
-- **Per-machine exclusions:** `.stow-exclude` (gitignored) lists stow packages to skip on a specific machine; managed interactively by `setup:exclude`. A parallel `.mise-conf-exclude` lists `mise/.config/mise/conf.d/*.toml` files to skip (so `mise install` ignores those tool groups), managed by `setup:mise-conf-exclude`. Both are honored by `setup:dotfiles`
+- **Per-machine exclusions:** `.stow-exclude` (gitignored) lists stow packages to skip on a specific machine; managed interactively by `setup:exclude`. A parallel `.mise-conf-exclude` lists `mise/.config/mise/conf.d/*.toml` files to skip — `init` prompts for these in Step 1.5, *before* it stows mise, so excluded conf files are never symlinked and `mise install` later in `bootstrap` never sees them. Re-runnable any time via `setup:mise-conf-exclude` (followed by `setup:dotfiles` to re-stow). `runtime.toml` is protected (always kept) because language runtimes are pre-installed via `bootstrap`'s `install:runtimes` dependency. Both files are honored by `setup:dotfiles`
 - **Custom packages:** Users can add their own config packages in a sibling directory (`~/.dotfiles-custom/`) via `setup:custom-dotfiles`. Tracked in `.custom-packages` (INI-style with `[name:tag]` sections). Custom packages are tag-aware and immune to `.stow-exclude`. See [CUSTOM-PACKAGES.md](CUSTOM-PACKAGES.md)
 - **XDG compliance:** Configs use `~/.config/` for tool-specific settings
 - **Task-driven:** All setup automation flows through Mise

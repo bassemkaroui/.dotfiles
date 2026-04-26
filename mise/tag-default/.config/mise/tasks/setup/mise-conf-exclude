@@ -18,6 +18,13 @@ for path in "$CONF_DIR"/*.toml; do
 done
 shopt -u nullglob
 
+# Hide protected files (e.g. runtime.toml) from the exclude UI entirely.
+FILTERED=()
+for f in "${ALL_CONF_FILES[@]}"; do
+    in_array "$f" "${MISE_CONF_PROTECTED[@]}" || FILTERED+=("$f")
+done
+ALL_CONF_FILES=("${FILTERED[@]}")
+
 if ((${#ALL_CONF_FILES[@]} == 0)); then
     fail "No conf.d/*.toml files found at $CONF_DIR"
 fi

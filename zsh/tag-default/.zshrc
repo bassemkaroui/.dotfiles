@@ -305,6 +305,9 @@ export PATH=$PATH:/usr/share/code/bin
 
 # To customize prompt, run `p10k configure` or edit ~/.p10k.zsh.
 [[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
+# Per-machine p10k tweaks (e.g. OS icon override written by setup:p10k-icon).
+# Sourced after .p10k.zsh so it survives `p10k configure` regenerations.
+[[ -f ~/.p10k.local.zsh ]] && source ~/.p10k.local.zsh
 
 # 1Password CLI autocompletion
 (( $+commands[op] )) && _zsh_lazy_completion op 'op completion zsh'

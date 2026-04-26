@@ -29,6 +29,10 @@ CUSTOM_FILE="$CUSTOM_DIR/.custom-packages"
 # Canonical list of default stow packages (shared across tasks)
 ALL_DEFAULT_PACKAGES=(bash fzf gnome_themes gpg zsh tmux bat yazi mise nvim gh gh-dash claude ghostty p10k)
 
+# conf.d files that must not be excluded; user-edited entries pointing at these
+# are dropped on read (with a warn) and never persisted on write.
+MISE_CONF_PROTECTED=(runtime.toml)
+
 # ─── p10k helpers ─────────────────────────────────────────────────────────────
 
 # Set by prepare_p10k_file() when ~/.p10k.zsh points into $CUSTOM_DIR.
@@ -142,7 +146,9 @@ write_exclusions() {
 }
 
 # Read excluded mise conf.d filenames (basenames, e.g. ai.toml).
-# Populates MISE_CONF_EXCLUDED. Strips comments and blank lines.
+# Populates MISE_CONF_EXCLUDED. Strips comments and blank lines. Protected
+# entries (MISE_CONF_PROTECTED) are dropped with a warn — runtime.toml is
+# always-on because language runtimes are pre-installed via install:runtimes.
 read_mise_conf_excludes() {
     MISE_CONF_EXCLUDED=()
     [[ -f "$MISE_CONF_EXCLUDE_FILE" ]] || return 0
@@ -150,16 +156,22 @@ read_mise_conf_excludes() {
         line="${line%%#*}"
         line="${line// /}"
         [[ -z "$line" ]] && continue
+        if in_array "$line" "${MISE_CONF_PROTECTED[@]}"; then
+            warn "Ignoring protected entry in $MISE_CONF_EXCLUDE_FILE: $line"
+            continue
+        fi
         MISE_CONF_EXCLUDED+=("$line")
     done <"$MISE_CONF_EXCLUDE_FILE"
 }
 
-# Write MISE_CONF_EXCLUDED back to file (preserves header comments)
+# Write MISE_CONF_EXCLUDED back to file (preserves header comments). Protected
+# entries are filtered out before writing so the file stays clean.
 write_mise_conf_excludes() {
     local tmpfile
     tmpfile="$(mktemp)"
     grep -E '^\s*(#|$)' "$MISE_CONF_EXCLUDE_FILE" >"$tmpfile" || true
     for f in "${MISE_CONF_EXCLUDED[@]}"; do
+        in_array "$f" "${MISE_CONF_PROTECTED[@]}" && continue
         printf '%s\n' "$f" >>"$tmpfile"
     done
     mv "$tmpfile" "$MISE_CONF_EXCLUDE_FILE"

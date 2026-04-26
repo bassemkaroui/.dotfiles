@@ -78,6 +78,20 @@ else
     ok_changed "stow installed: $(command -v stow) ($(stow --version 2>&1 | head -1))"
 fi
 
+# ─── Step 1.5: Choose mise conf.d exclusions before stow ─────────────────────
+# Run the exclude prompt before Step 2 so excluded conf.d files are never
+# symlinked into ~/.config/mise/conf.d/. Without this, bootstrap's
+# `mise install` would install every tool from every conf.d file before the
+# user got a chance to opt out. Invoked directly via bash because the
+# `setup:*` task namespace is only discoverable after Step 2 stows mise.
+
+info "Step 1.5: Choose mise conf.d exclusions"
+if [[ "${DOTFILES_NONINTERACTIVE:-0}" == "1" ]]; then
+    info "DOTFILES_NONINTERACTIVE=1 — keeping all conf.d files"
+else
+    bash "$HOME/.dotfiles/mise/tag-default/.config/mise/tasks/setup/mise-conf-exclude"
+fi
+
 # ─── Step 2: Deploy mise config via stow ──────────────────────────────────────
 
 # Back up conflicting real files/dirs inside ~/.config/mise/
