@@ -134,29 +134,41 @@ info "Step 2: Deploy mise config via stow"
 cd "$HOME/.dotfiles"
 mkdir -p "$HOME/.config"
 
-# Honor .mise-conf-exclude if present (re-runs after the user opted out of conf files)
+# Honor .mise-conf-exclude if present (re-runs after the user opted out of
+# conf files). Two non-obvious gotchas this guards against:
+#   1. Stow folds .config/mise/ into a single symlink (mise is the only
+#      package contributing to that path), which makes per-file --ignore
+#      irrelevant: every conf.d file is reachable through the folded
+#      symlink. Pass --no-folding when there are exclusions to force
+#      individual symlinks per file.
+#   2. Stow 2.3.1's --ignore regex doesn't honor a leading `^` anchor
+#      (empirically dropped/misinterpreted), so we anchor only at the end
+#      with `\$` and escape literal dots in the basename.
 read_mise_conf_excludes
 STOW_EXTRA_ARGS=()
-for f in "${MISE_CONF_EXCLUDED[@]}"; do
-    STOW_EXTRA_ARGS+=(--ignore="^${f}\$")
-done
+if ((${#MISE_CONF_EXCLUDED[@]} > 0)); then
+    STOW_EXTRA_ARGS+=(--no-folding)
+    for f in "${MISE_CONF_EXCLUDED[@]}"; do
+        STOW_EXTRA_ARGS+=(--ignore="${f//./\\.}\$")
+    done
+fi
 
-stow_output="$(stow -nv -d "$HOME/.dotfiles/mise" "${STOW_EXTRA_ARGS[@]}" -t "$HOME" tag-default 2>&1)" || true
+# Always restow: previously this branched on a `stow -nv` dry-run looking for
+# LINK lines, which silently no-op'd the "already deployed but exclude set
+# changed" case — leaving previously-linked conf.d files symlinked even after
+# the user opted out of them. -R is idempotent on an already-correct tree, so
+# we just run it unconditionally and only use the dry-run to detect blocking
+# real-file conflicts that need to be backed up first.
+stow_output="$(stow -nv -R -d "$HOME/.dotfiles/mise" "${STOW_EXTRA_ARGS[@]}" -t "$HOME" tag-default 2>&1)" || true
 
-if echo "$stow_output" | grep -q "LINK:"; then
-    # Fresh deploy — no conflicts, just needs linking
-    backup_mise_conflicts "$HOME/.dotfiles/mise/tag-default" "$HOME"
-    stow -d "$HOME/.dotfiles/mise" -R "${STOW_EXTRA_ARGS[@]}" -t "$HOME" tag-default 2>&1 \
-        | { grep -v '^BUG in find_stowed_path' || true; }
-    ok_changed "mise config deployed to ~/.config/mise/"
-elif echo "$stow_output" | grep -qi "conflict"; then
-    # Real files exist that block stow — back up and force deploy
-    backup_mise_conflicts "$HOME/.dotfiles/mise/tag-default" "$HOME"
-    stow -d "$HOME/.dotfiles/mise" -R "${STOW_EXTRA_ARGS[@]}" -t "$HOME" tag-default 2>&1 \
-        | { grep -v '^BUG in find_stowed_path' || true; }
+backup_mise_conflicts "$HOME/.dotfiles/mise/tag-default" "$HOME"
+stow -d "$HOME/.dotfiles/mise" -R "${STOW_EXTRA_ARGS[@]}" -t "$HOME" tag-default 2>&1 \
+    | { grep -v '^BUG in find_stowed_path' || true; }
+
+if echo "$stow_output" | grep -qi "conflict"; then
     ok_changed "mise config deployed to ~/.config/mise/ (conflicts resolved via backup)"
 else
-    ok "mise config already deployed"
+    ok_changed "mise config deployed to ~/.config/mise/"
 fi
 
 # ─── Step 3: Optionally run full bootstrap ────────────────────────────────────
