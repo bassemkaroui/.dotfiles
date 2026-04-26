@@ -14,7 +14,7 @@ Personal dotfiles managed with [GNU Stow](https://www.gnu.org/software/stow/) an
 
    ```bash
    git clone --recursive https://github.com/bassemkaroui/.dotfiles.git ~/.dotfiles
-   cd ~/.dotfiles && mise trust
+   cd ~/.dotfiles && mise trust --all
    git config submodule.recurse true
    ```
 
@@ -94,23 +94,23 @@ stow -D -d zsh -t ~ tag-default     # unstow
 
 ## Mise Tasks
 
-| Task                   | Description                                                                               |
-| ---------------------- | ----------------------------------------------------------------------------------------- |
-| `init`                 | Entry point: install stow, deploy mise config, optionally run bootstrap                   |
-| `bootstrap`            | Full machine setup                                                                        |
-| `install:stow`         | Install GNU Stow (apt/nala or from source if no sudo)                                     |
-| `install:nala`         | Install nala apt frontend                                                                 |
-| `install:runtimes`     | Install Rust, Go, Node via mise                                                           |
-| `install:veracrypt`    | Install latest VeraCrypt                                                                  |
-| `setup:zsh`            | Full zsh environment setup                                                                |
-| `setup:custom-dotfiles`| Manage custom config packages (add/remove your own configs)                               |
-| `setup:dotfiles`       | Deploy dotfiles via stow (resolves device tag)                                            |
-| `setup:shell-tools`    | Configure shell integrations                                                              |
-| `setup:p10k-configure` | Run p10k configuration wizard                                                             |
-| `setup:zsh-config`     | Configure `.zshrc` with mise integration, plugins, and theme (run after `setup:dotfiles`) |
-| `setup:completions`    | Set up shell completions directory                                                        |
-| `setup:nodes-tools`    | Enable corepack                                                                           |
-| `update:oh-my-tmux`    | Update oh-my-tmux submodule to latest master                                              |
+| Task                    | Description                                                                               |
+| ----------------------- | ----------------------------------------------------------------------------------------- |
+| `init`                  | Entry point: install stow, deploy mise config, optionally run bootstrap                   |
+| `bootstrap`             | Full machine setup                                                                        |
+| `install:stow`          | Install GNU Stow (apt/nala or from source if no sudo)                                     |
+| `install:nala`          | Install nala apt frontend                                                                 |
+| `install:runtimes`      | Install Rust, Go, Node via mise                                                           |
+| `install:veracrypt`     | Install latest VeraCrypt                                                                  |
+| `setup:zsh`             | Full zsh environment setup                                                                |
+| `setup:custom-dotfiles` | Manage custom config packages (add/remove your own configs)                               |
+| `setup:dotfiles`        | Deploy dotfiles via stow (resolves device tag)                                            |
+| `setup:shell-tools`     | Configure shell integrations                                                              |
+| `setup:p10k-configure`  | Run p10k configuration wizard                                                             |
+| `setup:zsh-config`      | Configure `.zshrc` with mise integration, plugins, and theme (run after `setup:dotfiles`) |
+| `setup:completions`     | Set up shell completions directory                                                        |
+| `setup:nodes-tools`     | Enable corepack                                                                           |
+| `update:oh-my-tmux`     | Update oh-my-tmux submodule to latest master                                              |
 
 ## tmux
 
