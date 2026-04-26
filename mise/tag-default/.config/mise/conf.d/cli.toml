@@ -1,0 +1,8 @@
+[tools]
+tmux = "latest"
+bat = "latest"
+delta = "latest"
+tlrc = "latest"
+gh = "latest"
+"pipx:urlscan" = "latest"
+resvg = "latest"

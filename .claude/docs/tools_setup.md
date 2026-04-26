@@ -2,16 +2,22 @@
 
 ## Runtime Installation via Mise
 
-**Language Runtimes** (installed by `mise run install:runtimes`):
-- Rust (latest)
-- Go (latest)
-- Node.js (latest)
-- Zig (0.15.2)
-- Neovim (stable, binary managed by mise)
+**Language Runtimes** are declared in `mise/tag-default/.config/mise/conf.d/runtime.toml`. The `install:runtimes` task derives its tool list from that file (parsing the `[tools]` section), so the source of truth is the TOML, not a hardcoded list — adding a new runtime to `runtime.toml` is enough for the next `mise run install:runtimes` to pick it up. Current contents: `rust`, `go`, `node` (all `latest`), `zig` (pinned).
+
+**Conf.d layout** (deployed to `~/.config/mise/conf.d/` via stow):
+- `runtime.toml` — language runtimes (rust, go, node, zig)
+- `neovim.toml` — neovim + tree-sitter dev deps
+- `yazi.toml` — yazi + its rich preview tooling
+- `cli.toml` — terminal/git CLIs (tmux, bat, delta, tlrc, gh, urlscan, resvg)
+- `dev.toml` — dev/build/secrets (uv, corepack, pre-commit, doppler)
+- `ai.toml` — AI agent tooling (claude, sandbox-runtime)
+- `net.toml` — networking (tailscale)
+
+Users can opt out of any conf file on a given machine via `.mise-conf-exclude` (managed interactively by `mise run setup:mise-conf-exclude`). Excluded files are never symlinked into `~/.config/mise/conf.d/`, so `mise install` skips those tool groups entirely.
 
 **How it works:**
-- Mise manages multiple versions per runtime; default versions defined in `.mise.toml`
-- Switch versions per-project via `.mise.toml` in project directory
+- Mise manages multiple versions per runtime; default versions defined in `runtime.toml`
+- Switch versions per-project via a project-local `.mise.toml`
 - Automatic switching via shell hooks in `.zshrc`
 
 **Verification:**
@@ -188,7 +194,7 @@ stow -d gh-dash -t ~ tag-default
 - Install with `<prefix> I` inside tmux
 
 **Oh-my-tmux dependencies:**
-- **urlscan** — URL extraction from terminal content. Installed via `pipx:urlscan` in `mise/.config/mise/conf.d/divers.toml` (auto-installed by `mise install`)
+- **urlscan** — URL extraction from terminal content. Installed via `pipx:urlscan` in `mise/.config/mise/conf.d/cli.toml` (auto-installed by `mise install`)
 - **PathPicker (fpp)** — Interactive file selection from terminal output. Installed via `mise run install:pathpicker` (tries apt/nala first, falls back to cloning from GitHub into `~/.local/opt/PathPicker`)
 
 ---

@@ -1,6 +1,18 @@
 #!/usr/bin/env bash
-#MISE description="Install Rust, Go, and Node via mise"
+#MISE description="Install language runtimes declared in conf.d/runtime.toml"
 #MISE depends=["install:build-deps"]
 set -eo pipefail
 
-mise install rust go node
+TASK_NAME="install:runtimes"
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../lib/helpers.sh"
+
+RUNTIME_TOML="$DOTFILES_DIR/mise/tag-default/.config/mise/conf.d/runtime.toml"
+[[ -f "$RUNTIME_TOML" ]] || fail "runtime.toml not found at $RUNTIME_TOML"
+
+mapfile -t RUNTIMES < <(
+    sed -n 's/^[[:space:]]*"\{0,1\}\([A-Za-z0-9_.:/+-]\{1,\}\)"\{0,1\}[[:space:]]*=.*/\1/p' "$RUNTIME_TOML"
+)
+((${#RUNTIMES[@]})) || fail "No tools parsed from $RUNTIME_TOML"
+
+info "Installing runtimes: ${RUNTIMES[*]}"
+mise install "${RUNTIMES[@]}"

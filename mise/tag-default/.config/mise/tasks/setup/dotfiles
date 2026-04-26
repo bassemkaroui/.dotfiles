@@ -173,6 +173,11 @@ else
     ok "No exclusions"
 fi
 
+read_mise_conf_excludes
+if ((${#MISE_CONF_EXCLUDED[@]} > 0)); then
+    ok "Mise conf exclusions: ${MISE_CONF_EXCLUDED[*]}"
+fi
+
 # ─── Load custom packages (needs DEVICE_TAG for tag resolution) ──────────────
 
 if [[ -f "$CUSTOM_FILE" ]]; then
@@ -309,7 +314,13 @@ for pkg in "${PACKAGES[@]}"; do
 
     if [[ -n "$STOW_TAG_DIR" ]]; then
         backup_conflicts "$DOTFILES_DIR/$pkg/$STOW_TAG_DIR" "$HOME"
-        stow -d "$DOTFILES_DIR/$pkg" -R -t "$HOME" "$STOW_TAG_DIR" 2>&1 | { grep -v '^BUG in find_stowed_path' || true; } | while read -r line; do
+        STOW_EXTRA_ARGS=()
+        if [[ "$pkg" == "mise" ]] && ((${#MISE_CONF_EXCLUDED[@]} > 0)); then
+            for f in "${MISE_CONF_EXCLUDED[@]}"; do
+                STOW_EXTRA_ARGS+=(--ignore="^${f}\$")
+            done
+        fi
+        stow -d "$DOTFILES_DIR/$pkg" -R "${STOW_EXTRA_ARGS[@]}" -t "$HOME" "$STOW_TAG_DIR" 2>&1 | { grep -v '^BUG in find_stowed_path' || true; } | while read -r line; do
             info "  $line"
         done
         STOWED_PACKAGES+=("$pkg")

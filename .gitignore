@@ -5,6 +5,7 @@
 .graphical-env
 .desktop-env
 .stow-exclude
+.mise-conf-exclude
 zsh/tag-default/.config/completions/_*
 gpg/tag-default/.gnupg/*
 !gpg/tag-default/.gnupg/gpg-agent.conf

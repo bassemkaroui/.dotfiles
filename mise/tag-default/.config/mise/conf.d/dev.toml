@@ -1,0 +1,5 @@
+[tools]
+uv = "latest"
+"npm:corepack" = "latest"
+pre-commit = "latest"
+doppler = { version = "latest", exe = "doppler" }

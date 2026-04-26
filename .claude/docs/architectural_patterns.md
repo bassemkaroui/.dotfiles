@@ -19,6 +19,8 @@
 
 **Per-machine exclusions:** A gitignored `.stow-exclude` file at the repo root lets you skip packages on specific machines. The dedicated `setup:exclude` task creates this file automatically on first run and prompts interactively to add or remove exclusions. When a package is newly excluded, its symlinks are removed via `stow -D` and any previously-backed-up files are restored. The file format is one package name per line, with `#` comments supported. Excluded default packages can be overridden by custom packages of the same name (see Custom Packages Extension).
 
+**Per-machine mise tool exclusions:** A parallel gitignored `.mise-conf-exclude` lets you skip individual `mise/tag-default/.config/mise/conf.d/*.toml` files on a given machine — e.g. drop the `ai.toml` group on a server, the `net.toml` group on a sandbox. Managed by `setup:mise-conf-exclude` (same `[a]dd`/`[r]emove` UX as `setup:exclude`), which auto-discovers available files from the repo's `conf.d/` directory. Enforcement happens at stow time: when stowing the `mise` package, `setup:dotfiles` (and `mise/tasks/init`) builds a `--ignore=^<file>$` flag per excluded entry, so excluded conf files never get symlinked into `~/.config/mise/conf.d/` and the subsequent `mise install` simply doesn't see them. Restow (`stow -R`) reconciles the deployed state automatically when the exclusion set grows or shrinks.
+
 **When applying:** Use Stow for any new tool/service config. Follow directory structure that mirrors `~/.` paths.
 
 ---

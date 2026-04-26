@@ -1,0 +1,132 @@
+#!/usr/bin/env bash
+#MISE description="Manage mise conf.d exclusions (.mise-conf-exclude)"
+#MISE raw=true
+set -eo pipefail
+
+# ─── Helpers ───────────────────────────────────────────────────────────────────
+
+TASK_NAME="setup:mise-conf-exclude"
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../lib/helpers.sh"
+
+# ─── Discover available conf.d files ───────────────────────────────────────────
+
+CONF_DIR="$DOTFILES_DIR/mise/tag-default/.config/mise/conf.d"
+ALL_CONF_FILES=()
+shopt -s nullglob
+for path in "$CONF_DIR"/*.toml; do
+    ALL_CONF_FILES+=("$(basename "$path")")
+done
+shopt -u nullglob
+
+if ((${#ALL_CONF_FILES[@]} == 0)); then
+    fail "No conf.d/*.toml files found at $CONF_DIR"
+fi
+
+# ─── Manage mise conf exclusions ───────────────────────────────────────────────
+
+info "Mise conf.d exclusions"
+
+if [[ ! -f "$MISE_CONF_EXCLUDE_FILE" ]]; then
+    {
+        printf '# Mise conf.d exclusion list (per-machine, gitignored)\n'
+        printf '# Add one filename (basename) per line to skip it during setup:dotfiles\n'
+        printf '# Available files: %s\n' "${ALL_CONF_FILES[*]}"
+    } >"$MISE_CONF_EXCLUDE_FILE"
+    info "Created $MISE_CONF_EXCLUDE_FILE — edit to skip conf.d files on this machine"
+fi
+
+if [[ "${DOTFILES_NONINTERACTIVE:-0}" == "1" ]]; then
+    read_mise_conf_excludes
+    if ((${#MISE_CONF_EXCLUDED[@]} > 0)); then
+        ok "Conf exclusions (DOTFILES_NONINTERACTIVE): ${MISE_CONF_EXCLUDED[*]}"
+    else
+        ok "No conf exclusions (DOTFILES_NONINTERACTIVE)"
+    fi
+    exit 0
+fi
+
+while true; do
+    read_mise_conf_excludes
+
+    if ((${#MISE_CONF_EXCLUDED[@]} > 0)); then
+        info "Currently excluded: ${MISE_CONF_EXCLUDED[*]}"
+    else
+        info "No conf.d files currently excluded"
+    fi
+
+    printf 'Modify exclusions? [a]dd / [r]emove / Enter to keep: '
+    read -r MODIFY_CHOICE
+
+    case "${MODIFY_CHOICE,,}" in
+        a | add)
+            AVAILABLE=()
+            for f in "${ALL_CONF_FILES[@]}"; do
+                in_array "$f" "${MISE_CONF_EXCLUDED[@]}" && continue
+                AVAILABLE+=("$f")
+            done
+            if ((${#AVAILABLE[@]} == 0)); then
+                warn "All conf.d files are already excluded"
+                continue
+            fi
+            info "Available conf.d files:"
+            for i in "${!AVAILABLE[@]}"; do
+                printf '  %d) %s\n' "$((i + 1))" "${AVAILABLE[$i]}"
+            done
+            printf 'Enter numbers to exclude (space-separated), or Enter to cancel: '
+            read -r ADD_CHOICES
+            [[ -z "$ADD_CHOICES" ]] && continue
+            for choice in $ADD_CHOICES; do
+                if [[ "$choice" =~ ^[0-9]+$ ]] && ((choice >= 1 && choice <= ${#AVAILABLE[@]})); then
+                    local_file="${AVAILABLE[$((choice - 1))]}"
+                    MISE_CONF_EXCLUDED+=("$local_file")
+                    info "  Added: $local_file"
+                else
+                    warn "  Invalid selection: $choice"
+                fi
+            done
+            write_mise_conf_excludes
+            ;;
+        r | remove)
+            if ((${#MISE_CONF_EXCLUDED[@]} == 0)); then
+                warn "No conf.d files to remove from exclusions"
+                continue
+            fi
+            info "Currently excluded conf.d files:"
+            for i in "${!MISE_CONF_EXCLUDED[@]}"; do
+                printf '  %d) %s\n' "$((i + 1))" "${MISE_CONF_EXCLUDED[$i]}"
+            done
+            printf 'Enter numbers to un-exclude (space-separated), or Enter to cancel: '
+            read -r REMOVE_CHOICES
+            [[ -z "$REMOVE_CHOICES" ]] && continue
+            TO_REMOVE=()
+            for choice in $REMOVE_CHOICES; do
+                if [[ "$choice" =~ ^[0-9]+$ ]] && ((choice >= 1 && choice <= ${#MISE_CONF_EXCLUDED[@]})); then
+                    TO_REMOVE+=("${MISE_CONF_EXCLUDED[$((choice - 1))]}")
+                    info "  Removed: ${MISE_CONF_EXCLUDED[$((choice - 1))]}"
+                else
+                    warn "  Invalid selection: $choice"
+                fi
+            done
+            NEW_EXCLUDED=()
+            for f in "${MISE_CONF_EXCLUDED[@]}"; do
+                in_array "$f" "${TO_REMOVE[@]}" || NEW_EXCLUDED+=("$f")
+            done
+            MISE_CONF_EXCLUDED=("${NEW_EXCLUDED[@]}")
+            write_mise_conf_excludes
+            ;;
+        "")
+            break
+            ;;
+        *)
+            warn "Unrecognized input '$MODIFY_CHOICE'"
+            ;;
+    esac
+done
+
+read_mise_conf_excludes
+if ((${#MISE_CONF_EXCLUDED[@]} > 0)); then
+    ok "Conf exclusions: ${MISE_CONF_EXCLUDED[*]}"
+    info "Run 'mise run setup:dotfiles' to apply (re-stows mise package with --ignore)"
+else
+    ok "No conf exclusions"
+fi

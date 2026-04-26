@@ -22,6 +22,7 @@ DOTFILES_DIR="$HOME/.dotfiles"
 CUSTOM_DIR="${DOTFILES_CUSTOM_DIR:-$HOME/.dotfiles-custom}"
 DEVICE_TAG_FILE="$DOTFILES_DIR/.device-tag"
 STOW_EXCLUDE_FILE="$DOTFILES_DIR/.stow-exclude"
+MISE_CONF_EXCLUDE_FILE="$DOTFILES_DIR/.mise-conf-exclude"
 DESKTOP_ENV_FILE="$DOTFILES_DIR/.desktop-env"
 CUSTOM_FILE="$CUSTOM_DIR/.custom-packages"
 
@@ -62,6 +63,30 @@ write_exclusions() {
         printf '%s\n' "$pkg" >>"$tmpfile"
     done
     mv "$tmpfile" "$STOW_EXCLUDE_FILE"
+}
+
+# Read excluded mise conf.d filenames (basenames, e.g. ai.toml).
+# Populates MISE_CONF_EXCLUDED. Strips comments and blank lines.
+read_mise_conf_excludes() {
+    MISE_CONF_EXCLUDED=()
+    [[ -f "$MISE_CONF_EXCLUDE_FILE" ]] || return 0
+    while IFS= read -r line; do
+        line="${line%%#*}"
+        line="${line// /}"
+        [[ -z "$line" ]] && continue
+        MISE_CONF_EXCLUDED+=("$line")
+    done <"$MISE_CONF_EXCLUDE_FILE"
+}
+
+# Write MISE_CONF_EXCLUDED back to file (preserves header comments)
+write_mise_conf_excludes() {
+    local tmpfile
+    tmpfile="$(mktemp)"
+    grep -E '^\s*(#|$)' "$MISE_CONF_EXCLUDE_FILE" >"$tmpfile" || true
+    for f in "${MISE_CONF_EXCLUDED[@]}"; do
+        printf '%s\n' "$f" >>"$tmpfile"
+    done
+    mv "$tmpfile" "$MISE_CONF_EXCLUDE_FILE"
 }
 
 # ─── Desktop environment detection ──────────────────────────────────────────

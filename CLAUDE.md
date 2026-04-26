@@ -61,6 +61,7 @@ stow -d <package> -t ~ tag-laptop          # Deploy a device-specific variant (e
 | Full machine setup      | `mise run bootstrap`             |
 | Set/change device tag   | `mise run setup:device-tag`      |
 | Manage exclusions       | `mise run setup:exclude`         |
+| Manage mise tool exclusions | `mise run setup:mise-conf-exclude` |
 | Manage custom configs   | `mise run setup:custom-dotfiles` |
 | Deploy/redeploy configs | `mise run setup:dotfiles`        |
 | Install git signing (if GPG key present) | `mise run setup:git-signing`     |
@@ -85,7 +86,7 @@ stow -d <package> -t ~ tag-laptop          # Deploy a device-specific variant (e
 - **Uniform tag layout:** All packages use `tag-*` subdirectories (e.g. `bash/tag-default/`; a device-specific variant would live at `<package>/tag-laptop/`). Deployed based on `.device-tag` with fallback to `tag-default/`
 - **Graphical detection:** Ghostty and GNOME extensions installation checks for graphical environment (`$DISPLAY`, `$WAYLAND_DISPLAY`, etc.) instead of device type. Override via `.graphical-env`
 - **Desktop environment detection:** DE-specific packages (GNOME themes, extensions) are auto-excluded when not on the matching DE. Detection via `.desktop-env` override → `$XDG_CURRENT_DESKTOP` → binary/directory fallback. Helpers: `is_gnome()`, `is_cosmic()` in `helpers.sh`
-- **Per-machine exclusions:** `.stow-exclude` (gitignored) lists packages to skip on a specific machine; managed interactively by `setup:dotfiles`
+- **Per-machine exclusions:** `.stow-exclude` (gitignored) lists stow packages to skip on a specific machine; managed interactively by `setup:exclude`. A parallel `.mise-conf-exclude` lists `mise/.config/mise/conf.d/*.toml` files to skip (so `mise install` ignores those tool groups), managed by `setup:mise-conf-exclude`. Both are honored by `setup:dotfiles`
 - **Custom packages:** Users can add their own config packages in a sibling directory (`~/.dotfiles-custom/`) via `setup:custom-dotfiles`. Tracked in `.custom-packages` (INI-style with `[name:tag]` sections). Custom packages are tag-aware and immune to `.stow-exclude`. See [CUSTOM-PACKAGES.md](CUSTOM-PACKAGES.md)
 - **XDG compliance:** Configs use `~/.config/` for tool-specific settings
 - **Task-driven:** All setup automation flows through Mise

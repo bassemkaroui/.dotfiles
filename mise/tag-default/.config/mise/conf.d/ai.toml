@@ -1,0 +1,3 @@
+[tools]
+claude = "latest"
+"npm:@anthropic-ai/sandbox-runtime" = "latest"
