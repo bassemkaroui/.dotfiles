@@ -2,4 +2,15 @@
 #MISE description="Enable corepack for Node package manager management"
 set -eo pipefail
 
+TASK_NAME="setup:nodes-tools"
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../lib/helpers.sh"
+
+# Runs as a depends_post of bootstrap, so it executes even when the body
+# aborted before node was installed. Skip cleanly instead of erroring.
+if ! command -v corepack &>/dev/null; then
+    warn "corepack not found on PATH — skipping (node may have failed to install)"
+    exit 0
+fi
+
 corepack enable
+ok "corepack enabled"

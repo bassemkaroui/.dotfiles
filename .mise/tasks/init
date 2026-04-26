@@ -10,6 +10,29 @@ TASK_NAME="init"
 # shellcheck source=../../mise/tag-default/.config/mise/tasks/lib/helpers.sh
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../mise/tag-default/.config/mise/tasks/lib/helpers.sh"
 
+# ─── Step 0: Ensure GitHub token is available ─────────────────────────────────
+# Done first so install:runtimes (a `bootstrap` dep, runs before its body) and
+# every later `mise install` inherits MISE_GITHUB_TOKEN. Without it, aqua/github/vfox
+# tools fail with cryptic 403s after exhausting the 60 req/hr unauth budget.
+
+info "Step 0: GitHub token"
+if ! ensure_github_token; then
+    warn "No GitHub token found in env (\$MISE_GITHUB_TOKEN/\$GITHUB_TOKEN/\$GH_TOKEN) or via gh CLI."
+    warn "mise install will rate-limit on aqua/github/vfox tools (e.g. ripgrep, fzf, gh, neovim)."
+    warn "Generate a PAT at https://github.com/settings/tokens (no scopes required for public repos)"
+    warn "and re-run with:  export GITHUB_TOKEN=ghp_..."
+    if [[ "${DOTFILES_NONINTERACTIVE:-0}" == "1" ]]; then
+        warn "Continuing in DOTFILES_NONINTERACTIVE mode (some tools may fail to install)."
+    else
+        # Offer the interactive recovery path: install gh via mise and run gh auth login.
+        prompt_github_auth || true
+        if [[ -z "${MISE_GITHUB_TOKEN:-}" ]]; then
+            read -rp $'\033[1;34m[INFO]\033[0m   Continue without a token? [y/N] ' answer
+            [[ "${answer,,}" =~ ^(y|yes)$ ]] || fail "Aborted — set up gh/GITHUB_TOKEN and re-run."
+        fi
+    fi
+fi
+
 # ─── Step 1: Ensure stow is available ─────────────────────────────────────────
 
 info "Step 1: Ensure stow is available"
@@ -17,6 +40,13 @@ if command -v stow &>/dev/null; then
     ok "stow already installed: $(command -v stow) ($(stow --version 2>&1 | head -1))"
 else
     INSTALLED=false
+    # Refresh apt cache once so the install attempts below don't fail with
+    # "Unable to locate package" on a stale or empty index. Cheap on a
+    # recently-updated machine; required on a fresh container or after `apt clean`.
+    if command -v sudo &>/dev/null && command -v apt-get &>/dev/null; then
+        info "Refreshing apt cache..."
+        sudo apt-get update -qq || warn "apt-get update failed — install attempts may miss packages"
+    fi
     if command -v sudo &>/dev/null; then
         for cmd in "nala install -y stow" "apt-get install -y stow" "dnf install -y stow" "pacman -S --noconfirm stow"; do
             mgr="${cmd%% *}"

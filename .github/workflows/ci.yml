@@ -174,3 +174,98 @@ jobs:
           diff -u /tmp/run1/backups.txt /tmp/run2/backups.txt \
             || { echo "::error::second run created new *.bak files"; fail=1; }
           exit "$fail"
+
+  bootstrap-smoke:
+    # End-to-end smoke test of `mise run init` in non-interactive mode. Catches
+    # regressions where a task in the bootstrap chain calls `read` without a
+    # DOTFILES_NONINTERACTIVE guard (would hang or abort an automated install).
+    # Heavier than stow-smoke — runs the full task graph, installs runtimes.
+    # Compile-from-source tools (ffmpeg, imagemagick in yazi.toml) are excluded
+    # via .mise-conf-exclude to keep the job under ~15 minutes.
+    name: bootstrap smoke (${{ matrix.image }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [ubuntu:24.04, ubuntu:22.04]
+    container:
+      image: ${{ matrix.image }}
+      # init runs `sudo`; root container needs a real user. Provide one.
+      options: --user root
+    env:
+      DEBIAN_FRONTEND: noninteractive
+      DOTFILES_NONINTERACTIVE: "1"
+      DOTFILES_TAG: default
+    steps:
+      - name: Install base prereqs
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            git sudo curl ca-certificates locales tzdata
+          locale-gen en_US.UTF-8
+      - name: Create non-root user with passwordless sudo
+        # Mirrors the production target: a regular user that escalates via sudo,
+        # not root. Catches `$USER`/PAM/chsh edge cases.
+        run: |
+          useradd -m -s /bin/bash tester
+          echo 'tester ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/tester
+          chmod 0440 /etc/sudoers.d/tester
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          path: repo
+      - name: Place repo at ~tester/.dotfiles
+        run: |
+          set -euo pipefail
+          mkdir -p /home/tester
+          cp -a "$GITHUB_WORKSPACE/repo" /home/tester/.dotfiles
+          chown -R tester:tester /home/tester/.dotfiles
+          # Headless overrides + skip the heaviest mise tools (ffmpeg, imagemagick
+          # in yazi.toml compile from source for 10+ min each).
+          printf 'default' > /home/tester/.dotfiles/.device-tag
+          printf 'server'  > /home/tester/.dotfiles/.graphical-env
+          printf 'none'    > /home/tester/.dotfiles/.desktop-env
+          printf 'yazi.toml\n' > /home/tester/.dotfiles/.mise-conf-exclude
+          chown tester:tester /home/tester/.dotfiles/.device-tag \
+                              /home/tester/.dotfiles/.graphical-env \
+                              /home/tester/.dotfiles/.desktop-env \
+                              /home/tester/.dotfiles/.mise-conf-exclude
+      - name: Install mise (as tester)
+        run: |
+          set -euo pipefail
+          sudo -u tester -H bash -lc 'curl -fsSL https://mise.run | sh'
+      - name: Run mise run init (non-interactive)
+        # Asserts the full init→bootstrap chain completes without hangs or aborts.
+        # Exits non-zero if any task in the chain fails — including the unguarded
+        # `read` blocker class this job exists to catch.
+        run: |
+          set -euo pipefail
+          sudo -u tester -H \
+            -E env DOTFILES_NONINTERACTIVE=1 DOTFILES_TAG=default \
+            bash -lc '
+              export PATH="$HOME/.local/bin:$PATH"
+              cd $HOME/.dotfiles
+              mise trust --all
+              mise run init
+            ' </dev/null
+      - name: Verify post-bootstrap state
+        run: |
+          set -euo pipefail
+          sudo -u tester -H bash -lc '
+            export PATH="$HOME/.local/bin:$PATH"
+            fail=0
+            for f in $HOME/.zshrc $HOME/.config/nvim/init.lua $HOME/.claude/settings.json; do
+              [[ -L "$f" || -f "$f" ]] || { echo "::error::missing $f"; fail=1; }
+            done
+            command -v zsh   >/dev/null || { echo "::error::zsh not installed"; fail=1; }
+            command -v stow  >/dev/null || { echo "::error::stow not installed"; fail=1; }
+            mise ls --installed | grep -qE "^(rust|go|node)\b" \
+              || { echo "::error::expected mise runtimes (rust/go/node) missing"; fail=1; }
+            broken=$(find $HOME -maxdepth 5 -xtype l 2>/dev/null | wc -l)
+            [[ "$broken" -eq 0 ]] || { echo "::error::$broken broken symlinks"; fail=1; }
+            exit "$fail"
+          '

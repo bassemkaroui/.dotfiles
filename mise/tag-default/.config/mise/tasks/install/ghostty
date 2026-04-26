@@ -115,6 +115,10 @@ if command -v ghostty &>/dev/null; then
     fi
 
     warn "Newer version available: $CURRENT_VERSION → $GHOSTTY_VERSION"
+    if [[ "${DOTFILES_NONINTERACTIVE:-0}" == "1" ]]; then
+        info "Update skipped (DOTFILES_NONINTERACTIVE — keeping $CURRENT_VERSION)"
+        exit 0
+    fi
     printf 'Update Ghostty to %s? [y/N]: ' "$GHOSTTY_VERSION"
     read -r CONFIRM_UPDATE
     if [[ "${CONFIRM_UPDATE,,}" != "y" ]]; then
@@ -127,8 +131,13 @@ fi
 # ─── Phase 4: Choose install method ───────────────────────────────────────────
 
 info "Phase 4: Choose install method"
-printf 'Install method: [d]eb (PPA) / [a]ppimage / [s]ource / s[n]ap: '
-read -r INSTALL_METHOD
+if [[ "${DOTFILES_NONINTERACTIVE:-0}" == "1" ]]; then
+    INSTALL_METHOD="${GHOSTTY_INSTALL_METHOD:-deb}"
+    info "Install method: $INSTALL_METHOD (DOTFILES_NONINTERACTIVE — override with GHOSTTY_INSTALL_METHOD)"
+else
+    printf 'Install method: [d]eb (PPA) / [a]ppimage / [s]ource / s[n]ap: '
+    read -r INSTALL_METHOD
+fi
 
 case "${INSTALL_METHOD,,}" in
     d | deb) INSTALL_METHOD="deb" ;;

@@ -29,6 +29,89 @@ CUSTOM_FILE="$CUSTOM_DIR/.custom-packages"
 # Canonical list of default stow packages (shared across tasks)
 ALL_DEFAULT_PACKAGES=(bash fzf gnome_themes gpg zsh tmux bat yazi mise nvim gh gh-dash claude ghostty p10k)
 
+# ─── GitHub token resolution ─────────────────────────────────────────────────
+#
+# `mise install` resolves aqua/github/vfox tools by hitting the GitHub releases
+# API, which rate-limits unauthenticated callers to 60 req/hr. A fresh bootstrap
+# easily blows past that and fails with cryptic 403s. Probe in priority order
+# (env first, then `gh auth token`) and export MISE_GITHUB_TOKEN so every
+# subsequent `mise install` / `mise run` subprocess inherits it. Caller decides
+# whether a missing token is a warn or a hard fail based on interactivity.
+#
+# Returns 0 if a token was located/exported, 1 otherwise.
+ensure_github_token() {
+    if [[ -n "${MISE_GITHUB_TOKEN:-}" ]]; then
+        ok "GitHub token already set in env (\$MISE_GITHUB_TOKEN)"
+        return 0
+    fi
+    if [[ -n "${GITHUB_TOKEN:-}" ]]; then
+        export MISE_GITHUB_TOKEN="$GITHUB_TOKEN"
+        ok "GitHub token loaded from \$GITHUB_TOKEN"
+        return 0
+    fi
+    if [[ -n "${GH_TOKEN:-}" ]]; then
+        export MISE_GITHUB_TOKEN="$GH_TOKEN"
+        ok "GitHub token loaded from \$GH_TOKEN"
+        return 0
+    fi
+    if command -v gh &>/dev/null && gh auth status &>/dev/null 2>&1; then
+        local token
+        token="$(gh auth token 2>/dev/null || true)"
+        if [[ -n "$token" ]]; then
+            export MISE_GITHUB_TOKEN="$token"
+            ok "GitHub token loaded from gh CLI"
+            return 0
+        fi
+    fi
+    return 1
+}
+
+# Interactive recovery path used when ensure_github_token fails and the user
+# is at a TTY. Offers to install gh via mise (aqua:cli/cli — single GitHub API
+# call, fits in the 60/hr unauth budget), runs `gh auth login`, then re-probes.
+# Returns 0 if a token was obtained, 1 if the user declined or auth failed.
+# Caller must check DOTFILES_NONINTERACTIVE before calling — this function
+# unconditionally prompts.
+prompt_github_auth() {
+    if ! command -v gh &>/dev/null; then
+        read -rp $'\033[1;34m[INFO]\033[0m   Install gh now via mise (aqua:cli/cli) so you can authenticate? [Y/n] ' answer
+        if [[ ! "${answer,,}" =~ ^(y|yes|)$ ]]; then
+            return 1
+        fi
+        if ! command -v mise &>/dev/null; then
+            warn "mise not on PATH — cannot auto-install gh. Install gh manually and re-run."
+            return 1
+        fi
+        info "Installing gh via mise..."
+        if ! mise install gh@latest; then
+            warn "gh install failed — set GITHUB_TOKEN manually and re-run"
+            return 1
+        fi
+        local gh_bin
+        gh_bin="$(mise which gh 2>/dev/null || true)"
+        if [[ -n "$gh_bin" && -x "$gh_bin" ]]; then
+            # Make the freshly-installed gh discoverable for the rest of this
+            # task (and any child processes that inherit our PATH).
+            local gh_dir
+            gh_dir="$(dirname "$gh_bin")"
+            export PATH="$gh_dir:$PATH"
+        fi
+        ok_changed "gh installed: ${gh_bin:-$(command -v gh)}"
+    fi
+
+    if ! gh auth status &>/dev/null 2>&1; then
+        info "Launching 'gh auth login' — follow the prompts (browser or device code)..."
+        if ! gh auth login; then
+            warn "gh auth login failed or was cancelled"
+            return 1
+        fi
+    fi
+
+    # Reset the cached export so ensure_github_token re-runs the probe chain.
+    unset MISE_GITHUB_TOKEN
+    ensure_github_token
+}
+
 # conf.d files that must not be excluded; user-edited entries pointing at these
 # are dropped on read (with a warn) and never persisted on write.
 MISE_CONF_PROTECTED=(runtime.toml)
@@ -181,6 +264,10 @@ write_mise_conf_excludes() {
 
 # Detect running desktop environment. Sets DESKTOP_ENV to: gnome, cosmic, or unknown.
 # Checks .desktop-env override first, then XDG_CURRENT_DESKTOP, then binary presence.
+# Accepted .desktop-env override values: gnome, cosmic, unknown. The aliases
+# none/server/headless are normalized to "unknown" so DE-conditional tasks
+# (gnome_themes, cosmic) cleanly skip on a headless machine — same vocabulary
+# as .graphical-env for consistency.
 detect_desktop_env() {
     [[ -n "${DESKTOP_ENV:-}" ]] && return 0 # already detected (cached)
 
@@ -189,10 +276,13 @@ detect_desktop_env() {
         DESKTOP_ENV="$(<"$DESKTOP_ENV_FILE")"
         DESKTOP_ENV="${DESKTOP_ENV,,}"   # lowercase
         DESKTOP_ENV="${DESKTOP_ENV// /}" # strip spaces
+        case "$DESKTOP_ENV" in
+            none | server | headless) DESKTOP_ENV="unknown" ;;
+        esac
         if [[ "$DESKTOP_ENV" =~ ^(gnome|cosmic|unknown)$ ]]; then
             return 0
         fi
-        warn "Invalid .desktop-env value '$DESKTOP_ENV', falling back to auto-detect"
+        warn "Invalid .desktop-env value '$DESKTOP_ENV' (use gnome|cosmic|unknown|none|server|headless), falling back to auto-detect"
         DESKTOP_ENV=""
     fi
 

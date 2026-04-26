@@ -1,12 +1,13 @@
+# ffmpeg + imagemagick are installed by `install:media-tools` (apt → mise ubi
+# fallback), not via the asdf plugin defaults — those compile from source for
+# 10-20 minutes each.
 [tools]
 glow = "latest"
 duckdb = "latest"
-ffmpeg = "latest"
 jq = "latest"
 eza = "latest"
 fzf = "latest"
 zoxide = "latest"
-imagemagick = "latest"
 fd = "latest"
 ripgrep = "latest"
 yazi = "25.4.8"

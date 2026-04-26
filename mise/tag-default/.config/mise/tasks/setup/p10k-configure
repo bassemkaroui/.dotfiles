@@ -46,6 +46,10 @@ else
     warn "No .zshrc found — p10k configure may not work"
 fi
 
+if [[ "${DOTFILES_NONINTERACTIVE:-0}" == "1" ]]; then
+    ok "Skipped p10k configure (DOTFILES_NONINTERACTIVE)"
+    exit 0
+fi
 printf 'Would you like to configure powerlevel10k now? (y/N): '
 read -r CONFIGURE_P10K
 if [[ "$CONFIGURE_P10K" =~ ^[Yy]$ ]]; then

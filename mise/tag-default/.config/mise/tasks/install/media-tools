@@ -1,0 +1,93 @@
+#!/usr/bin/env bash
+#MISE description="Install ffmpeg + imagemagick (apt with sudo, else mise ubi static binaries)"
+#MISE raw=true
+set -eo pipefail
+
+# ─── Helpers ───────────────────────────────────────────────────────────────────
+
+TASK_NAME="install:media-tools"
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../lib/helpers.sh"
+
+# Two backends, picked at runtime:
+#   1. apt (preferred when sudo+apt-get available — small, integrates with
+#      system, ~30 sec install).
+#   2. mise ubi (static binary from upstream GitHub release — no sudo needed,
+#      ~10 sec install, ~80 MB binary). Used as a fallback for sudo-less users.
+# Was previously `ffmpeg = "latest"` / `imagemagick = "latest"` in
+# conf.d/yazi.toml, which compiled both from source via the asdf plugin —
+# 10-20 minutes each on a typical machine.
+
+# ─── Phase 1: short-circuit if already installed ─────────────────────────────
+
+info "Phase 1: Check existing installation"
+HAVE_FFMPEG=false
+HAVE_MAGICK=false
+command -v ffmpeg &>/dev/null && HAVE_FFMPEG=true
+# IM7 ships `magick` (single entry point); apt's `imagemagick` on Ubuntu still
+# defaults to IM6 which only ships `convert`/`mogrify`/etc. Either is acceptable
+# for yazi previews and shell scripts, so accept both as "installed".
+if command -v magick &>/dev/null || command -v convert &>/dev/null; then
+    HAVE_MAGICK=true
+fi
+if [[ "$HAVE_FFMPEG" == true && "$HAVE_MAGICK" == true ]]; then
+    magick_bin="$(command -v magick || command -v convert)"
+    ok "ffmpeg + imagemagick already installed: $(command -v ffmpeg), $magick_bin"
+    exit 0
+fi
+
+# ─── Phase 2: try apt (preferred) ────────────────────────────────────────────
+
+# `sudo -n true` checks for cached/passwordless sudo without prompting; if it
+# fails we fall straight through to the no-sudo path rather than blocking on a
+# password prompt during an unattended bootstrap.
+try_apt_install() {
+    command -v sudo &>/dev/null || return 1
+    command -v apt-get &>/dev/null || return 1
+    sudo -n true 2>/dev/null || return 1
+
+    info "Phase 2: Install via apt (sudo available)"
+    local pkgs=()
+    [[ "$HAVE_FFMPEG" == false ]] && pkgs+=(ffmpeg)
+    [[ "$HAVE_MAGICK" == false ]] && pkgs+=(imagemagick)
+    if sudo apt-get install -y "${pkgs[@]}"; then
+        ok_changed "Installed via apt: ${pkgs[*]}"
+        return 0
+    fi
+    return 1
+}
+
+# ─── Phase 3: fall back to mise ubi (no sudo) ────────────────────────────────
+
+# Static GPL build by BtbN. Tarball ships ffmpeg + ffprobe, no shared libs —
+# fine for shell consumers (yazi, scripts) but won't satisfy linkers.
+try_mise_ubi() {
+    info "Phase 3: Install static binaries via mise ubi (no sudo path)"
+    if [[ "$HAVE_FFMPEG" == false ]]; then
+        if mise install "ubi:BtbN/FFmpeg-Builds[matching=ffmpeg-master-latest-linux64-gpl.tar.xz,exe=ffmpeg]@latest"; then
+            ok_changed "ffmpeg installed via mise (ubi:BtbN/FFmpeg-Builds)"
+        else
+            warn "ffmpeg static install failed — yazi previews/CLI ops needing ffmpeg won't work"
+            return 1
+        fi
+    fi
+    if [[ "$HAVE_MAGICK" == false ]]; then
+        # ImageMagick releases ship a portable AppImage; pick the gcc Q16-HDRI variant
+        # that matches what apt's `imagemagick` ships. Asset name pattern is stable.
+        if mise install "ubi:ImageMagick/ImageMagick[matching=clang-x86_64.AppImage$,exe=magick]@latest"; then
+            ok_changed "imagemagick installed via mise (ubi:ImageMagick/ImageMagick)"
+        else
+            warn "imagemagick static install failed — yazi image previews may be limited"
+        fi
+    fi
+    return 0
+}
+
+if try_apt_install; then
+    exit 0
+fi
+
+if try_mise_ubi; then
+    exit 0
+fi
+
+fail "Could not install ffmpeg/imagemagick via apt or mise (ubi). Install manually."

@@ -13,6 +13,10 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../lib/helpers.sh"
 P10K_LOCAL="$HOME/.p10k.local.zsh"
 
 info "OS icon in p10k"
+if [[ "${DOTFILES_NONINTERACTIVE:-0}" == "1" ]]; then
+    ok "OS icon unchanged (DOTFILES_NONINTERACTIVE)"
+    exit 0
+fi
 printf 'Would you like to change the OS icon in p10k? (y/N): '
 read -r CHANGE_ICON
 if [[ ! "$CHANGE_ICON" =~ ^[Yy]$ ]]; then

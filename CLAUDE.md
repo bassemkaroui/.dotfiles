@@ -43,9 +43,12 @@ A modular dotfiles management system using **GNU Stow** for clean symlink-based 
 ```bash
 git clone --recursive https://github.com/bassemkaroui/.dotfiles.git ~/.dotfiles
 cd ~/.dotfiles
+gh auth login           # Or: export GITHUB_TOKEN=ghp_... — required for mise install (rate limit)
 mise run init           # Installs stow, prompts for mise conf.d exclusions, deploys mise config
 mise run bootstrap      # Full machine setup
 ```
+
+> **GitHub token is required.** `mise install` resolves aqua/github/vfox tools (ripgrep, fzf, gh, neovim, …) by hitting the GitHub releases API, which rate-limits unauthenticated callers to 60 req/hr. `init` Step 0 probes `$MISE_GITHUB_TOKEN` → `$GITHUB_TOKEN` → `$GH_TOKEN` → `gh auth token`. If none are found and `gh` is missing, `init` (interactive mode) offers to install it via `mise install gh@latest` (single API call, fits in the unauth budget) and runs `gh auth login`. Non-sudo users who can't install `gh` at all can instead generate a PAT at https://github.com/settings/tokens (no scopes required) and `export GITHUB_TOKEN=ghp_...` before re-running. Non-interactive mode warns and continues best-effort.
 
 **Manual stow deployment:**
 
@@ -84,8 +87,10 @@ stow -d <package> -t ~ tag-laptop          # Deploy a device-specific variant (e
 
 - **Modular via Stow:** Each tool in its own package; deploy selectively
 - **Uniform tag layout:** All packages use `tag-*` subdirectories (e.g. `bash/tag-default/`; a device-specific variant would live at `<package>/tag-laptop/`). Deployed based on `.device-tag` with fallback to `tag-default/`
-- **Graphical detection:** Ghostty and GNOME extensions installation checks for graphical environment (`$DISPLAY`, `$WAYLAND_DISPLAY`, etc.) instead of device type. Override via `.graphical-env`
-- **Desktop environment detection:** DE-specific packages (GNOME themes, extensions) are auto-excluded when not on the matching DE. Detection via `.desktop-env` override → `$XDG_CURRENT_DESKTOP` → binary/directory fallback. Helpers: `is_gnome()`, `is_cosmic()` in `helpers.sh`
+- **Graphical detection:** Ghostty and GNOME extensions installation checks for graphical environment (`$DISPLAY`, `$WAYLAND_DISPLAY`, etc.) instead of device type. Override via `.graphical-env` (accepted values: `graphical`/`yes` to force-enable, `server`/`none`/`no` to force-disable)
+- **Desktop environment detection:** DE-specific packages (GNOME themes, extensions) are auto-excluded when not on the matching DE. Detection via `.desktop-env` override → `$XDG_CURRENT_DESKTOP` → binary/directory fallback. Accepted `.desktop-env` values: `gnome`, `cosmic`, `unknown` (with `none`/`server`/`headless` aliased to `unknown`). Helpers: `is_gnome()`, `is_cosmic()` in `helpers.sh`
+- **Non-interactive mode:** Set `DOTFILES_NONINTERACTIVE=1` to make `init` and every task it triggers skip prompts and pick safe defaults — required for automated installs (CI, provisioning, `curl | bash`-style flows). Honored by `init`, `setup:zsh` (Phase 6 hostname), `setup:p10k-icon`, `setup:p10k-configure`, `setup:device-tag`, `setup:exclude`, `setup:mise-conf-exclude`, `setup:custom-dotfiles`, and `install:ghostty` (defaults to `deb`; override via `GHOSTTY_INSTALL_METHOD`). Without this flag, `init` runs `bootstrap` only after a user confirmation prompt; with it, the run is fully unattended. The Step 0 GitHub token check warns (rather than aborts) under this mode so unattended runs can still proceed best-effort
+- **Media tools (ffmpeg, imagemagick):** Installed by `install:media-tools` (a `bootstrap` dep), not via the asdf plugin defaults — those compile from source for 10-20 minutes each. Strategy: try `sudo apt-get install -y ffmpeg imagemagick` first (small, integrated); if no sudo, fall back to mise `ubi:` static binaries from `BtbN/FFmpeg-Builds` and `ImageMagick/ImageMagick`. Static binaries don't ship shared libs — fine for shell consumers (yazi, scripts), would break linkers
 - **Per-machine exclusions:** `.stow-exclude` (gitignored) lists stow packages to skip on a specific machine; managed interactively by `setup:exclude`. A parallel `.mise-conf-exclude` lists `mise/.config/mise/conf.d/*.toml` files to skip — `init` prompts for these in Step 1.5, *before* it stows mise, so excluded conf files are never symlinked and `mise install` later in `bootstrap` never sees them. Re-runnable any time via `setup:mise-conf-exclude` (followed by `setup:dotfiles` to re-stow). `runtime.toml` is protected (always kept) because language runtimes are pre-installed via `bootstrap`'s `install:runtimes` dependency. Both files are honored by `setup:dotfiles`
 - **Custom packages:** Users can add their own config packages in a sibling directory (`~/.dotfiles-custom/`) via `setup:custom-dotfiles`. Tracked in `.custom-packages` (INI-style with `[name:tag]` sections). Custom packages are tag-aware and immune to `.stow-exclude`. See [CUSTOM-PACKAGES.md](CUSTOM-PACKAGES.md)
 - **XDG compliance:** Configs use `~/.config/` for tool-specific settings

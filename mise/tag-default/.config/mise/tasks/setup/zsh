@@ -72,7 +72,11 @@ fi
 # ─── Phase 2: Set zsh as default shell ────────────────────────────────────────
 
 info "Phase 2: Set zsh as default shell"
-CURRENT_SHELL="$(getent passwd "${USER:-$(whoami)}" 2>/dev/null | cut -d: -f7 || true)"
+# Normalize $USER once — chsh/usermod calls below interpolate it directly and
+# would otherwise pass an empty string under cron, `docker exec`, or any other
+# context where $USER isn't exported.
+USER="${USER:-$(id -un)}"
+CURRENT_SHELL="$(getent passwd "$USER" 2>/dev/null | cut -d: -f7 || true)"
 [[ -z "$CURRENT_SHELL" ]] && CURRENT_SHELL="${SHELL:-}"
 ZSH_PATH="$(command -v zsh)"
 
@@ -324,6 +328,10 @@ fi
 # ─── Phase 6: Hostname prompt (interactive) ──────────────────────────────────
 
 info "Phase 6: Hostname"
+if [[ "${DOTFILES_NONINTERACTIVE:-0}" == "1" ]]; then
+    ok "Hostname unchanged (DOTFILES_NONINTERACTIVE)"
+    exit 0
+fi
 printf 'Would you like to change the hostname? (y/N): '
 read -r CHANGE_HOSTNAME
 if [[ "$CHANGE_HOSTNAME" =~ ^[Yy]$ ]]; then

@@ -1,9 +1,26 @@
 #!/usr/bin/env bash
 #MISE description="Bootstrap a new machine: install tools, runtimes, and run post-setup steps"
 #MISE raw=true
-#MISE depends=["install:runtimes", "install:nala", "install:stow"]
+#MISE depends=["install:runtimes", "install:nala", "install:stow", "install:media-tools"]
 #MISE depends_post=["setup:nodes-tools", "install:veracrypt", "install:pathpicker"]
 set -eo pipefail
+
+TASK_NAME="bootstrap"
+# shellcheck source=lib/helpers.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/helpers.sh"
+
+# Ensure MISE_GITHUB_TOKEN is exported before the body's `mise install` (and
+# install:ghostty's GitHub release lookups). For users hitting bootstrap
+# directly (not via `init`), this is the first line of defence against
+# unauthenticated rate-limit failures on aqua/github/vfox tools.
+if ! ensure_github_token; then
+    warn "No GitHub token found — mise install may rate-limit on github-backed tools."
+    warn "Generate a PAT at https://github.com/settings/tokens (no scopes required for public repos)"
+    warn "and re-run with:  export GITHUB_TOKEN=ghp_..."
+    if [[ "${DOTFILES_NONINTERACTIVE:-0}" != "1" ]]; then
+        prompt_github_auth || warn "Continuing without a token — some installs may fail."
+    fi
+fi
 
 mise run setup:zsh
 mise install
