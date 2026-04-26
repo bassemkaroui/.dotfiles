@@ -214,13 +214,14 @@ else
     info "Installing FiraCode Nerd Font..."
     mkdir -p "$FONT_DIR"
     TMPDIR_FONT="$(mktemp -d)"
-    curl -fSL -o "$TMPDIR_FONT/FiraCode.zip" \
-        "https://github.com/ryanoasis/nerd-fonts/releases/latest/download/FiraCode.zip"
-    if command -v unzip &>/dev/null; then
-        unzip -o "$TMPDIR_FONT/FiraCode.zip" "FiraCodeNerdFont-Medium.ttf" -d "$FONT_DIR" \
-            || unzip -o "$TMPDIR_FONT/FiraCode.zip" -d "$FONT_DIR"
-    elif command -v python3 &>/dev/null; then
-        python3 -c "
+    if curl -fSL --retry 3 --retry-delay 2 --retry-all-errors \
+        -o "$TMPDIR_FONT/FiraCode.zip" \
+        "https://github.com/ryanoasis/nerd-fonts/releases/latest/download/FiraCode.zip"; then
+        if command -v unzip &>/dev/null; then
+            unzip -o "$TMPDIR_FONT/FiraCode.zip" "FiraCodeNerdFont-Medium.ttf" -d "$FONT_DIR" \
+                || unzip -o "$TMPDIR_FONT/FiraCode.zip" -d "$FONT_DIR"
+        elif command -v python3 &>/dev/null; then
+            python3 -c "
 import zipfile, sys
 with zipfile.ZipFile('$TMPDIR_FONT/FiraCode.zip') as z:
     targets = [n for n in z.namelist() if 'FiraCodeNerdFont-Medium.ttf' in n]
@@ -229,16 +230,20 @@ with zipfile.ZipFile('$TMPDIR_FONT/FiraCode.zip') as z:
     for t in targets:
         z.extract(t, '$FONT_DIR')
 "
-    elif command -v busybox &>/dev/null && busybox unzip -l "$TMPDIR_FONT/FiraCode.zip" &>/dev/null; then
-        busybox unzip -o "$TMPDIR_FONT/FiraCode.zip" -d "$FONT_DIR"
+        elif command -v busybox &>/dev/null && busybox unzip -l "$TMPDIR_FONT/FiraCode.zip" &>/dev/null; then
+            busybox unzip -o "$TMPDIR_FONT/FiraCode.zip" -d "$FONT_DIR"
+        else
+            fail "Cannot extract zip: no unzip, python3, or busybox available"
+        fi
+        if command -v fc-cache &>/dev/null; then
+            fc-cache -f -v "$FONT_DIR" >/dev/null 2>&1
+        fi
+        ok_changed "FiraCode Nerd Font installed"
     else
-        fail "Cannot extract zip: no unzip, python3, or busybox available"
+        warn "Could not download FiraCode Nerd Font (network error) — skipping"
+        warn "Re-run 'mise run setup:zsh' later to retry"
     fi
     rm -rf "$TMPDIR_FONT"
-    if command -v fc-cache &>/dev/null; then
-        fc-cache -f -v "$FONT_DIR" >/dev/null 2>&1
-    fi
-    ok_changed "FiraCode Nerd Font installed"
 fi
 
 # Set terminal font to FiraCode Nerd Font

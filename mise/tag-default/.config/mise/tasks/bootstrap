@@ -13,6 +13,7 @@ mise run setup:exclude
 mise run setup:mise-conf-exclude
 mise run setup:custom-dotfiles
 mise run setup:dotfiles
+mise run setup:p10k-icon
 mise run install:gnome-extensions
 mise run setup:cosmic
 mise run setup:zsh-config

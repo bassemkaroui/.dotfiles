@@ -29,6 +29,82 @@ CUSTOM_FILE="$CUSTOM_DIR/.custom-packages"
 # Canonical list of default stow packages (shared across tasks)
 ALL_DEFAULT_PACKAGES=(bash fzf gnome_themes gpg zsh tmux bat yazi mise nvim gh gh-dash claude ghostty p10k)
 
+# ─── p10k helpers ─────────────────────────────────────────────────────────────
+
+# Set by prepare_p10k_file() when ~/.p10k.zsh points into $CUSTOM_DIR.
+P10K_CUSTOM_TARGET=""
+
+# Prepare ~/.p10k.zsh for in-place modification.
+# - Symlink -> main repo: break it (don't modify the default template)
+# - Symlink -> custom repo: leave it (writes go through to custom repo)
+# - Symlink -> elsewhere: break it with a warning
+# - Broken symlink: remove it, return 1
+# - Real file: leave as-is
+# - Missing: warn and return 1
+# Sets P10K_CUSTOM_TARGET to the resolved path if symlink points to custom repo.
+prepare_p10k_file() {
+    local p10k="$HOME/.p10k.zsh"
+    P10K_CUSTOM_TARGET=""
+
+    if [[ -L "$p10k" ]]; then
+        local target
+        target="$(readlink -f "$p10k" 2>/dev/null || true)"
+
+        if [[ -z "$target" || ! -e "$target" ]]; then
+            rm -f "$p10k"
+            warn "Removed broken symlink: ~/.p10k.zsh"
+            return 1
+        fi
+
+        if [[ "$target" == "$CUSTOM_DIR"/* ]]; then
+            P10K_CUSTOM_TARGET="$target"
+            # shellcheck disable=SC2088 # user-visible path in a display string
+            info "~/.p10k.zsh points to custom repo"
+        elif [[ "$target" == "$DOTFILES_DIR"/* ]]; then
+            cp --remove-destination "$target" "$p10k"
+            info "Replaced default-repo symlink with a real file"
+        else
+            cp --remove-destination "$target" "$p10k"
+            warn "Replaced symlink (target: $target) with a real file"
+        fi
+    elif [[ ! -f "$p10k" ]]; then
+        # shellcheck disable=SC2088 # user-visible path in a display string
+        warn "~/.p10k.zsh does not exist — run p10k configure to create it"
+        return 1
+    fi
+    return 0
+}
+
+# After modifying p10k, sync changes back to custom repo and auto-commit.
+# No-op unless P10K_CUSTOM_TARGET was set by prepare_p10k_file().
+sync_custom_p10k() {
+    [[ -n "$P10K_CUSTOM_TARGET" ]] || return 0
+
+    local p10k="$HOME/.p10k.zsh"
+
+    # If the wizard destroyed the symlink, copy the new file back and re-stow
+    if [[ ! -L "$p10k" && -f "$p10k" ]]; then
+        cp "$p10k" "$P10K_CUSTOM_TARGET"
+        local pkg_dir="$CUSTOM_DIR/p10k"
+        local tag_dir
+        tag_dir="$(basename "$(dirname "$P10K_CUSTOM_TARGET")")"
+        stow -d "$pkg_dir" -t "$HOME" -R "$tag_dir" 2>/dev/null \
+            && info "Re-stowed custom p10k symlink" \
+            || warn "Could not re-stow p10k — symlink may need manual fix"
+    fi
+
+    # Auto-commit if custom dir is a git repo
+    if [[ -d "$CUSTOM_DIR/.git" ]]; then
+        local changed
+        changed="$(git -C "$CUSTOM_DIR" diff --name-only -- 'p10k/' 2>/dev/null || true)"
+        if [[ -n "$changed" ]]; then
+            git -C "$CUSTOM_DIR" add p10k/
+            git -C "$CUSTOM_DIR" commit -m "update p10k config"
+            ok_changed "Auto-committed p10k changes to custom repo"
+        fi
+    fi
+}
+
 # ─── Shared utilities ─────────────────────────────────────────────────────────
 
 # Check if a value is in an array
