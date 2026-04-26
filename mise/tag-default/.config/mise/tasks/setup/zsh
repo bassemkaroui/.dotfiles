@@ -98,8 +98,19 @@ else
     fi
     SHELL_CHANGED=false
 
+    # Detect NSS-managed users absent from /etc/passwd (Google Cloud OS Login,
+    # LDAP, SSSD, etc.). chsh/usermod only touch /etc/passwd, so they always
+    # fail with "user does not exist" for these accounts. Skip straight to the
+    # login-file fallback to avoid scary error noise.
+    NSS_ONLY_USER=false
+    if ! grep -q "^${USER}:" /etc/passwd 2>/dev/null; then
+        NSS_ONLY_USER=true
+        info "User '$USER' is NSS-managed (not in /etc/passwd) — chsh/usermod won't work"
+        info "Skipping to login-file fallback"
+    fi
+
     # Method 1: sudo chsh (root bypasses PAM password prompt for target user)
-    if [[ "$SHELL_CHANGED" == false ]] && command -v sudo &>/dev/null && command -v chsh &>/dev/null; then
+    if [[ "$SHELL_CHANGED" == false && "$NSS_ONLY_USER" == false ]] && command -v sudo &>/dev/null && command -v chsh &>/dev/null; then
         info "Trying: sudo chsh -s $ZSH_PATH $USER"
         if sudo chsh -s "$ZSH_PATH" "$USER"; then
             ok_changed "Default shell changed to $ZSH_PATH via sudo chsh"
@@ -108,7 +119,7 @@ else
     fi
 
     # Method 2: chsh directly (let PAM prompt user for their password)
-    if [[ "$SHELL_CHANGED" == false ]] && command -v chsh &>/dev/null; then
+    if [[ "$SHELL_CHANGED" == false && "$NSS_ONLY_USER" == false ]] && command -v chsh &>/dev/null; then
         info "Trying: chsh -s $ZSH_PATH"
         if chsh -s "$ZSH_PATH"; then
             ok_changed "Default shell changed to $ZSH_PATH via chsh"
@@ -117,7 +128,7 @@ else
     fi
 
     # Method 3: sudo usermod (allow sudo password prompt)
-    if [[ "$SHELL_CHANGED" == false ]] && command -v sudo &>/dev/null; then
+    if [[ "$SHELL_CHANGED" == false && "$NSS_ONLY_USER" == false ]] && command -v sudo &>/dev/null; then
         info "Trying: sudo usermod -s $ZSH_PATH $USER"
         if sudo usermod -s "$ZSH_PATH" "$USER"; then
             ok_changed "Default shell changed to $ZSH_PATH via sudo usermod"
@@ -127,7 +138,9 @@ else
 
     # Method 4: Login file fallback (exec zsh)
     if [[ "$SHELL_CHANGED" == false ]]; then
-        warn "Could not change shell via chsh or usermod"
+        if [[ "$NSS_ONLY_USER" == false ]]; then
+            warn "Could not change shell via chsh or usermod"
+        fi
         warn "Falling back to 'exec zsh' in login file (only works for TTY/SSH logins,"
         warn "graphical terminal emulators read the shell from /etc/passwd)"
 

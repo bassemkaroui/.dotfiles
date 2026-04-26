@@ -155,6 +155,21 @@ source ~/.zshrc
 
 ## Shell Configuration Issues
 
+### `setup:zsh` Logs `chsh: user … does not exist in /etc/passwd`
+
+**Symptom:** During `mise run bootstrap`, Phase 2 of `setup:zsh` prints errors from `chsh` and `usermod` (`user '<name>' does not exist`, `PAM: Authentication failure`) and ends with a `[WARN] Could not change shell via chsh or usermod` line. After the run, SSHing in still drops you into zsh.
+
+**Cause:** Your account is **NSS-managed but absent from `/etc/passwd`** — typical of Google Cloud OS Login, LDAP, or SSSD-backed users. `getent passwd` resolves the account (so the script sees a `/bin/bash` login shell), but `chsh` and `usermod` only edit `/etc/passwd` directly and bail with "user does not exist". Verify with:
+
+```bash
+getent passwd "$USER"          # Returns a row → NSS knows you
+grep "^${USER}:" /etc/passwd   # No output → not in the local file
+```
+
+**Why zsh still launches on login:** `setup:zsh` falls back to writing `exec zsh` into `~/.bash_profile`. On SSH/TTY login, bash runs, sources `.bash_profile`, and `exec`s into zsh — so your effective login shell *is* zsh for SSH sessions, even though the OS-level record still says bash.
+
+**Resolution:** None needed — the fallback is the intended behavior for these accounts. Current `setup:zsh` detects the NSS-only case and skips the chsh/usermod attempts to avoid the noise; if you're on an older revision, pull and re-run. Graphical terminal emulators that read the shell from `/etc/passwd` (rare on cloud VMs) won't honor the fallback — for those, change the shell via your directory provider (e.g. OS Login's POSIX account attributes) instead.
+
 ### Zsh Won't Start After Dotfiles Deployment
 
 **Likely cause:** Syntax error in `.zshrc` or sourced files
