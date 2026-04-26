@@ -13,6 +13,7 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../lib/helpers.sh"
 PACKAGES=(
     # Core build tools
     build-essential pkg-config autoconf automake libtool
+    clang libclang-dev
 
     # ffmpeg (compiled from source via asdf plugin)
     nasm yasm
