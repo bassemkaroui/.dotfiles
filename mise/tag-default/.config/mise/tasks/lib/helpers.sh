@@ -73,7 +73,20 @@ ensure_github_token() {
 # Caller must check DOTFILES_NONINTERACTIVE before calling — this function
 # unconditionally prompts.
 prompt_github_auth() {
-    if ! command -v gh &>/dev/null; then
+    # Invoke gh via mise exec when it isn't on PATH. `init` Step 0 runs before
+    # mise config is stowed in Step 2, so a freshly-installed gh isn't
+    # activated in any mise config — `mise which gh` returns empty and PATH
+    # surgery silently no-ops. `mise exec gh@latest --` works regardless of
+    # activation state and falls through to the native gh once it's on PATH.
+    _gh() {
+        if command -v gh &>/dev/null; then
+            gh "$@"
+        else
+            mise exec gh@latest -- gh "$@"
+        fi
+    }
+
+    if ! command -v gh &>/dev/null && ! mise where gh@latest &>/dev/null; then
         read -rp $'\033[1;34m[INFO]\033[0m   Install gh now via mise (aqua:cli/cli) so you can authenticate? [Y/n] ' answer
         if [[ ! "${answer,,}" =~ ^(y|yes|)$ ]]; then
             return 1
@@ -87,29 +100,27 @@ prompt_github_auth() {
             warn "gh install failed — set GITHUB_TOKEN manually and re-run"
             return 1
         fi
-        local gh_bin
-        gh_bin="$(mise which gh 2>/dev/null || true)"
-        if [[ -n "$gh_bin" && -x "$gh_bin" ]]; then
-            # Make the freshly-installed gh discoverable for the rest of this
-            # task (and any child processes that inherit our PATH).
-            local gh_dir
-            gh_dir="$(dirname "$gh_bin")"
-            export PATH="$gh_dir:$PATH"
-        fi
-        ok_changed "gh installed: ${gh_bin:-$(command -v gh)}"
+        ok_changed "gh installed: $(mise where gh@latest 2>/dev/null || echo '<unknown path>')"
     fi
 
-    if ! gh auth status &>/dev/null 2>&1; then
+    if ! _gh auth status &>/dev/null 2>&1; then
         info "Launching 'gh auth login' — follow the prompts (browser or device code)..."
-        if ! gh auth login; then
+        if ! _gh auth login; then
             warn "gh auth login failed or was cancelled"
             return 1
         fi
     fi
 
-    # Reset the cached export so ensure_github_token re-runs the probe chain.
-    unset MISE_GITHUB_TOKEN
-    ensure_github_token
+    # Extract the token directly via _gh — ensure_github_token's `command -v gh`
+    # probe would miss a mise-installed-but-not-activated gh.
+    local token
+    token="$(_gh auth token 2>/dev/null || true)"
+    if [[ -n "$token" ]]; then
+        export MISE_GITHUB_TOKEN="$token"
+        ok "GitHub token loaded from gh CLI"
+        return 0
+    fi
+    return 1
 }
 
 # conf.d files that must not be excluded; user-edited entries pointing at these
