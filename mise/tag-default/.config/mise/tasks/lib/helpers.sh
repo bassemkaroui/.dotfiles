@@ -103,6 +103,11 @@ prompt_github_auth() {
         ok_changed "gh installed: $(mise where gh@latest 2>/dev/null || echo '<unknown path>')"
     fi
 
+    # gh's config-migration step writes to ${GH_CONFIG_DIR:-$XDG_CONFIG_HOME/gh},
+    # but errors out instead of creating the directory if it's missing — common
+    # on a fresh machine where ~/.config doesn't exist yet.
+    mkdir -p "${GH_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/gh}"
+
     if ! _gh auth status &>/dev/null 2>&1; then
         info "Launching 'gh auth login' — follow the prompts (browser or device code)..."
         if ! _gh auth login; then
