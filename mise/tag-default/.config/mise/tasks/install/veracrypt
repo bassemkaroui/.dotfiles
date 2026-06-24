@@ -31,6 +31,17 @@ if [[ "$INSTALLED_UPSTREAM" == "$VERSION" ]]; then
     exit 0
 fi
 
+# VeraCrypt's package pre-removal script aborts the upgrade if any volume is
+# mounted (it would pull the device out from under a live mount). `veracrypt
+# --text --list` exits 0 only when one or more volumes are mounted. Detect that
+# up front and skip with an actionable message, rather than letting dpkg error
+# out mid-upgrade and leave veracrypt-console half-configured.
+if command -v veracrypt &>/dev/null && veracrypt --text --list &>/dev/null; then
+    warn "VeraCrypt volume(s) currently mounted — cannot upgrade to $VERSION."
+    warn "Dismount them first (e.g. 'veracrypt -t -d'), then re-run: mise run install:veracrypt"
+    exit 0
+fi
+
 ASSET_NAME="veracrypt-console-${VERSION}-Ubuntu-${OS_VERSION}-${ARCH}.deb"
 ASSET_URL="$(echo "$RELEASE_JSON" | python3 -c "
 import json, sys
