@@ -12,7 +12,6 @@
 - `cli.toml` — terminal/git CLIs (tmux, bat, delta, tlrc, gh, urlscan, resvg)
 - `dev.toml` — dev/build/secrets (uv, corepack, pre-commit, doppler)
 - `ai.toml` — AI agent tooling (claude, sandbox-runtime)
-- `net.toml` — networking (tailscale)
 
 Users can opt out of any conf file on a given machine via `.mise-conf-exclude`. The prompt runs as Step 1.5 of `mise run init` — _before_ mise is stowed — so excluded files are never symlinked into `~/.config/mise/conf.d/`, and the subsequent `mise install` (run during `bootstrap`) skips those tool groups entirely. The same exclude task is re-runnable later via `mise run setup:mise-conf-exclude` (follow with `mise run setup:dotfiles` to re-stow). `runtime.toml` is protected: it's hidden from the exclude UI and silently dropped from `.mise-conf-exclude` if hand-edited in, because runtimes are pre-installed via `bootstrap`'s `install:runtimes` dependency before the body even runs.
 
