@@ -34,73 +34,84 @@ if is_install_excluded obsidian; then
     exit 0
 fi
 
-# ─── Phase 2: Confirm install (graphical detection + opt-out prompt) ──────────
+# ─── Phase 2: Detect existing installation ────────────────────────────────────
 
-info "Phase 2: Confirm install"
-GRAPHICAL_ENV_FILE="$DOTFILES_DIR/.graphical-env"
-HAS_GRAPHICAL=false
-
-# 1. .graphical-env pin file (shared with Ghostty / GNOME extensions)
-if [[ -f "$GRAPHICAL_ENV_FILE" ]]; then
-    GRAPHICAL_PIN="$(<"$GRAPHICAL_ENV_FILE")"
-    case "${GRAPHICAL_PIN,,}" in
-        graphical | yes) HAS_GRAPHICAL=true ;;
-        server | none | no)
-            info "Graphical environment disabled via .graphical-env. Skipping Obsidian install."
-            exit 0
-            ;;
-    esac
+info "Phase 2: Check installed version"
+CURRENT_VERSION="$(obsidian_installed_version)"
+if [[ -n "$CURRENT_VERSION" ]]; then
+    ok "Obsidian installed: $CURRENT_VERSION"
 fi
 
-# 2. Auto-detect a graphical session
-if [[ "$HAS_GRAPHICAL" == false ]]; then
-    if [[ -n "${DISPLAY:-}" || -n "${WAYLAND_DISPLAY:-}" ]]; then
-        HAS_GRAPHICAL=true
-    elif [[ "${XDG_SESSION_TYPE:-}" == "x11" || "${XDG_SESSION_TYPE:-}" == "wayland" ]]; then
-        HAS_GRAPHICAL=true
+# ─── Phase 3: Confirm install (fresh installs only) ───────────────────────────
+#
+# An existing install is proof enough the user wants Obsidian, so we skip the
+# graphical gating and the install/opt-out prompt entirely — re-runs go straight
+# to the update check below. The confirm prompt only matters the first time.
+
+if [[ -z "$CURRENT_VERSION" ]]; then
+    info "Phase 3: Confirm install"
+    GRAPHICAL_ENV_FILE="$DOTFILES_DIR/.graphical-env"
+    HAS_GRAPHICAL=false
+
+    # 1. .graphical-env pin file (shared with Ghostty / GNOME extensions)
+    if [[ -f "$GRAPHICAL_ENV_FILE" ]]; then
+        GRAPHICAL_PIN="$(<"$GRAPHICAL_ENV_FILE")"
+        case "${GRAPHICAL_PIN,,}" in
+            graphical | yes) HAS_GRAPHICAL=true ;;
+            server | none | no)
+                info "Graphical environment disabled via .graphical-env. Skipping Obsidian install."
+                exit 0
+                ;;
+        esac
     fi
-fi
 
-if [[ "$HAS_GRAPHICAL" == true ]]; then
-    if [[ "$NONINTERACTIVE" == "1" ]]; then
-        info "Graphical environment detected — installing (DOTFILES_NONINTERACTIVE)"
+    # 2. Auto-detect a graphical session
+    if [[ "$HAS_GRAPHICAL" == false ]]; then
+        if [[ -n "${DISPLAY:-}" || -n "${WAYLAND_DISPLAY:-}" ]]; then
+            HAS_GRAPHICAL=true
+        elif [[ "${XDG_SESSION_TYPE:-}" == "x11" || "${XDG_SESSION_TYPE:-}" == "wayland" ]]; then
+            HAS_GRAPHICAL=true
+        fi
+    fi
+
+    if [[ "$HAS_GRAPHICAL" == true ]]; then
+        if [[ "$NONINTERACTIVE" == "1" ]]; then
+            info "Graphical environment detected — installing (DOTFILES_NONINTERACTIVE)"
+        else
+            printf 'Install Obsidian? [Y/n]: '
+            read -r REPLY_INSTALL
+            if [[ "${REPLY_INSTALL,,}" =~ ^n ]]; then
+                offer_optout_persist
+                exit 0
+            fi
+        fi
     else
-        printf 'Install Obsidian? [Y/n]: '
+        if [[ "$NONINTERACTIVE" == "1" ]]; then
+            info "No graphical environment detected — skipping Obsidian (DOTFILES_NONINTERACTIVE)"
+            exit 0
+        fi
+        warn "No graphical environment detected."
+        printf 'Install Obsidian anyway? [y/N]: '
         read -r REPLY_INSTALL
-        if [[ "${REPLY_INSTALL,,}" =~ ^n ]]; then
+        if [[ ! "${REPLY_INSTALL,,}" =~ ^y ]]; then
             offer_optout_persist
             exit 0
         fi
     fi
-else
-    if [[ "$NONINTERACTIVE" == "1" ]]; then
-        info "No graphical environment detected — skipping Obsidian (DOTFILES_NONINTERACTIVE)"
-        exit 0
-    fi
-    warn "No graphical environment detected."
-    printf 'Install Obsidian anyway? [y/N]: '
-    read -r REPLY_INSTALL
-    if [[ ! "${REPLY_INSTALL,,}" =~ ^y ]]; then
-        offer_optout_persist
-        exit 0
-    fi
 fi
 
-# ─── Phase 3: Resolve latest release ──────────────────────────────────────────
+# ─── Phase 4: Resolve latest release ──────────────────────────────────────────
 
-info "Phase 3: Resolve latest Obsidian release"
+info "Phase 4: Resolve latest Obsidian release"
 obsidian_fetch_release || fail "Could not reach the GitHub releases API"
 LATEST_VERSION="$(obsidian_latest_version)"
 APPIMAGE_URL="$(obsidian_appimage_url)"
 [[ -n "$LATEST_VERSION" ]] || fail "Could not determine the latest Obsidian version"
 ok "Latest Obsidian: $LATEST_VERSION"
 
-# ─── Phase 4: Compare with installed version ──────────────────────────────────
+# ─── Phase 5: Up-to-date / update decision (existing installs) ────────────────
 
-info "Phase 4: Check installed version"
-CURRENT_VERSION="$(obsidian_installed_version)"
 if [[ -n "$CURRENT_VERSION" ]]; then
-    ok "Obsidian installed: $CURRENT_VERSION"
     if [[ "$CURRENT_VERSION" == "$LATEST_VERSION" ]]; then
         ok "Obsidian is up to date ($CURRENT_VERSION)"
         exit 0
@@ -118,14 +129,14 @@ if [[ -n "$CURRENT_VERSION" ]]; then
     fi
 fi
 
-# ─── Phase 5: Install ─────────────────────────────────────────────────────────
+# ─── Phase 6: Install ─────────────────────────────────────────────────────────
 
-info "Phase 5: Install Obsidian"
+info "Phase 6: Install Obsidian"
 obsidian_install_appimage "$LATEST_VERSION" "$APPIMAGE_URL"
 
-# ─── Phase 6: Verify ──────────────────────────────────────────────────────────
+# ─── Phase 7: Verify ──────────────────────────────────────────────────────────
 
-info "Phase 6: Verify installation"
+info "Phase 7: Verify installation"
 if [[ -x "$OBSIDIAN_BIN" ]]; then
     ok_changed "Obsidian ready: $OBSIDIAN_BIN ($(obsidian_installed_version))"
 else
