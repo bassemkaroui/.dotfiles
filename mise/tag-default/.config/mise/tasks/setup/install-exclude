@@ -1,0 +1,129 @@
+#!/usr/bin/env bash
+#MISE description="Manage standalone install opt-outs (.install-exclude)"
+#MISE raw=true
+set -eo pipefail
+
+# ─── Helpers ───────────────────────────────────────────────────────────────────
+
+TASK_NAME="setup:install-exclude"
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../lib/helpers.sh"
+
+# Render "key — description" for an opt-out key (description from the parallel
+# INSTALL_OPTOUT_DESCS array; falls back to the bare key if not found).
+optout_label() {
+    local key="$1"
+    local i
+    for i in "${!INSTALL_OPTOUT_KEYS[@]}"; do
+        if [[ "${INSTALL_OPTOUT_KEYS[$i]}" == "$key" ]]; then
+            printf '%s — %s' "$key" "${INSTALL_OPTOUT_DESCS[$i]}"
+            return 0
+        fi
+    done
+    printf '%s' "$key"
+}
+
+if ((${#INSTALL_OPTOUT_KEYS[@]} == 0)); then
+    fail "No opt-out-able install tasks are registered (INSTALL_OPTOUT_KEYS is empty)"
+fi
+
+# ─── Manage install exclusions ────────────────────────────────────────────────
+
+info "Standalone install opt-outs (.install-exclude)"
+
+ensure_install_exclude_file
+
+if [[ "${DOTFILES_NONINTERACTIVE:-0}" == "1" ]]; then
+    read_install_excludes
+    if ((${#INSTALL_EXCLUDED[@]} > 0)); then
+        ok "Install opt-outs (DOTFILES_NONINTERACTIVE): ${INSTALL_EXCLUDED[*]}"
+    else
+        ok "No install opt-outs (DOTFILES_NONINTERACTIVE)"
+    fi
+    exit 0
+fi
+
+while true; do
+    read_install_excludes
+
+    if ((${#INSTALL_EXCLUDED[@]} > 0)); then
+        info "Currently opted out: ${INSTALL_EXCLUDED[*]}"
+    else
+        info "Nothing opted out — all registered install tasks will run"
+    fi
+
+    printf 'Modify opt-outs? [a]dd / [r]emove / Enter to keep: '
+    read -r MODIFY_CHOICE
+
+    case "${MODIFY_CHOICE,,}" in
+        a | add)
+            AVAILABLE=()
+            for k in "${INSTALL_OPTOUT_KEYS[@]}"; do
+                in_array "$k" "${INSTALL_EXCLUDED[@]}" && continue
+                AVAILABLE+=("$k")
+            done
+            if ((${#AVAILABLE[@]} == 0)); then
+                warn "All registered install tasks are already opted out"
+                continue
+            fi
+            info "Available install tasks:"
+            for i in "${!AVAILABLE[@]}"; do
+                printf '  %d) %s\n' "$((i + 1))" "$(optout_label "${AVAILABLE[$i]}")"
+            done
+            printf 'Enter numbers to opt out (space-separated), or Enter to cancel: '
+            read -r ADD_CHOICES
+            [[ -z "$ADD_CHOICES" ]] && continue
+            for choice in $ADD_CHOICES; do
+                if [[ "$choice" =~ ^[0-9]+$ ]] && ((choice >= 1 && choice <= ${#AVAILABLE[@]})); then
+                    selected="${AVAILABLE[$((choice - 1))]}"
+                    INSTALL_EXCLUDED+=("$selected")
+                    info "  Added: $selected"
+                else
+                    warn "  Invalid selection: $choice"
+                fi
+            done
+            write_install_excludes
+            ;;
+        r | remove)
+            if ((${#INSTALL_EXCLUDED[@]} == 0)); then
+                warn "Nothing to remove from opt-outs"
+                continue
+            fi
+            info "Currently opted out:"
+            for i in "${!INSTALL_EXCLUDED[@]}"; do
+                printf '  %d) %s\n' "$((i + 1))" "$(optout_label "${INSTALL_EXCLUDED[$i]}")"
+            done
+            printf 'Enter numbers to re-enable (space-separated), or Enter to cancel: '
+            read -r REMOVE_CHOICES
+            [[ -z "$REMOVE_CHOICES" ]] && continue
+            TO_REMOVE=()
+            for choice in $REMOVE_CHOICES; do
+                if [[ "$choice" =~ ^[0-9]+$ ]] && ((choice >= 1 && choice <= ${#INSTALL_EXCLUDED[@]})); then
+                    TO_REMOVE+=("${INSTALL_EXCLUDED[$((choice - 1))]}")
+                    info "  Removed: ${INSTALL_EXCLUDED[$((choice - 1))]}"
+                else
+                    warn "  Invalid selection: $choice"
+                fi
+            done
+            NEW_EXCLUDED=()
+            for k in "${INSTALL_EXCLUDED[@]}"; do
+                in_array "$k" "${TO_REMOVE[@]}" || NEW_EXCLUDED+=("$k")
+            done
+            INSTALL_EXCLUDED=("${NEW_EXCLUDED[@]}")
+            write_install_excludes
+            ;;
+        "")
+            break
+            ;;
+        *)
+            warn "Unrecognized input '$MODIFY_CHOICE'"
+            ;;
+    esac
+done
+
+read_install_excludes
+if ((${#INSTALL_EXCLUDED[@]} > 0)); then
+    ok "Install opt-outs: ${INSTALL_EXCLUDED[*]}"
+    info "Opted-out install:<key> tasks will exit early on the next 'mise run install:*' / bootstrap"
+else
+    ok "No install opt-outs"
+fi

@@ -7,6 +7,11 @@ set -eo pipefail
 TASK_NAME="install:veracrypt"
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../lib/helpers.sh"
 
+if is_install_excluded veracrypt; then
+    info "VeraCrypt is opted out in .install-exclude — skipping. (re-enable: mise run setup:install-exclude)"
+    exit 0
+fi
+
 source /etc/os-release
 
 INSTALLED_VERSION="$(dpkg-query -W -f='${Version}' veracrypt-console 2>/dev/null \

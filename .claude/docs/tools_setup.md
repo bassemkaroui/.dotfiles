@@ -261,3 +261,17 @@ Mise tasks under the `gpg:` namespace wrap common secret-key lifecycle operation
 - Default: Can afford more complex multi-key setups
 
 **Setup:** Device tag resolved and persisted by `mise run setup:dotfiles` (see `.device-tag`)
+
+---
+
+## Graphical Applications
+
+### Obsidian (AppImage)
+
+**Install:** `mise run install:obsidian` (also runs during `bootstrap`). Obsidian ships official AppImages on GitHub releases (`obsidianmd/obsidian-releases`); the task resolves the latest release, picks the asset for the host architecture (`x86_64` or `arm64`), downloads it to `~/.local/bin/obsidian`, and marks it executable. The installed version is recorded in a small state file (`${XDG_STATE_HOME:-~/.local/state}/obsidian/version`) so update checks never have to launch the GUI to read a version.
+
+**Desktop integration:** Best-effort — the task extracts the bundled icon via `--appimage-extract` into `~/.local/share/icons/hicolor/256x256/apps/obsidian.png` and writes a `~/.local/share/applications/obsidian.desktop` launcher (registering the `obsidian://` URL scheme). On a host without FUSE/extraction support the launcher is still written with a generic icon name — never fatal.
+
+**Graphical gating & opt-out:** Like Ghostty, install only proceeds in a graphical environment (auto-detected, or forced via `.graphical-env`). In an interactive run it prompts `Install Obsidian? [Y/n]`; declining offers to persist the choice into `.install-exclude` so future runs skip it. Under `DOTFILES_NONINTERACTIVE=1` it installs when a graphical env is detected and skips on a headless host. To opt out explicitly, add `obsidian` via `mise run setup:install-exclude` (see the per-machine install opt-outs pattern in [architectural_patterns.md](architectural_patterns.md)).
+
+**Updates:** `mise run update:obsidian` checks the latest release and, if newer than the recorded version, swaps the AppImage in place (no prompt — suitable for wiring into your own cron/timer). Re-running `mise run install:obsidian` does the same but interactively offers the update. Shared logic for both tasks lives in `mise/.../tasks/lib/obsidian_helpers.sh`.

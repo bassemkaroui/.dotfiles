@@ -11,6 +11,13 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../lib/helpers.sh"
 
 DOTFILES_DIR="${DOTFILES_DIR:-$HOME/.dotfiles}"
 
+# ─── Phase 0: Opt-out registry check ─────────────────────────────────────────
+
+if is_install_excluded ghostty; then
+    info "Ghostty is opted out in .install-exclude — skipping. (re-enable: mise run setup:install-exclude)"
+    exit 0
+fi
+
 # ─── Phase 1: Graphical environment check ────────────────────────────────────
 
 info "Phase 1: Detect graphical environment"

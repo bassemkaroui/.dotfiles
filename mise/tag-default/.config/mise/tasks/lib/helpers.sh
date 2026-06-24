@@ -23,11 +23,26 @@ CUSTOM_DIR="${DOTFILES_CUSTOM_DIR:-$HOME/.dotfiles-custom}"
 DEVICE_TAG_FILE="$DOTFILES_DIR/.device-tag"
 STOW_EXCLUDE_FILE="$DOTFILES_DIR/.stow-exclude"
 MISE_CONF_EXCLUDE_FILE="$DOTFILES_DIR/.mise-conf-exclude"
+INSTALL_EXCLUDE_FILE="$DOTFILES_DIR/.install-exclude"
 DESKTOP_ENV_FILE="$DOTFILES_DIR/.desktop-env"
 CUSTOM_FILE="$CUSTOM_DIR/.custom-packages"
 
 # Canonical list of default stow packages (shared across tasks)
 ALL_DEFAULT_PACKAGES=(bash fzf gnome_themes gpg zsh tmux bat yazi mise nvim gh gh-dash claude ghostty p10k)
+
+# Standalone install:<key> tasks the user may opt out of on a given machine,
+# recorded in .install-exclude (gitignored). This is a third opt-out axis next
+# to .stow-exclude (config packages) and .mise-conf-exclude (mise tool groups):
+# it covers optional apps/CLIs installed by dedicated tasks rather than via stow
+# or mise. INSTALL_OPTOUT_DESCS is parallel to INSTALL_OPTOUT_KEYS (same order)
+# and drives the setup:install-exclude picker.
+INSTALL_OPTOUT_KEYS=(obsidian ghostty veracrypt pathpicker)
+INSTALL_OPTOUT_DESCS=(
+    "Obsidian notes app (AppImage)"
+    "Ghostty terminal (graphical)"
+    "VeraCrypt encryption tool"
+    "Facebook PathPicker (fpp) CLI"
+)
 
 # ─── GitHub token resolution ─────────────────────────────────────────────────
 #
@@ -274,6 +289,58 @@ write_mise_conf_excludes() {
         printf '%s\n' "$f" >>"$tmpfile"
     done
     mv "$tmpfile" "$MISE_CONF_EXCLUDE_FILE"
+}
+
+# ─── Standalone install opt-out registry (.install-exclude) ──────────────────
+
+# Read opted-out install keys into INSTALL_EXCLUDED (strip comments/blank lines).
+read_install_excludes() {
+    INSTALL_EXCLUDED=()
+    [[ -f "$INSTALL_EXCLUDE_FILE" ]] || return 0
+    while IFS= read -r line; do
+        line="${line%%#*}"
+        line="${line// /}"
+        [[ -z "$line" ]] && continue
+        INSTALL_EXCLUDED+=("$line")
+    done <"$INSTALL_EXCLUDE_FILE"
+}
+
+# Write INSTALL_EXCLUDED back to file (preserves header comments).
+write_install_excludes() {
+    local tmpfile
+    tmpfile="$(mktemp)"
+    grep -E '^\s*(#|$)' "$INSTALL_EXCLUDE_FILE" >"$tmpfile" 2>/dev/null || true
+    for k in "${INSTALL_EXCLUDED[@]}"; do
+        printf '%s\n' "$k" >>"$tmpfile"
+    done
+    mv "$tmpfile" "$INSTALL_EXCLUDE_FILE"
+}
+
+# Create .install-exclude with a header if it doesn't exist yet.
+ensure_install_exclude_file() {
+    [[ -f "$INSTALL_EXCLUDE_FILE" ]] && return 0
+    {
+        printf '# Standalone install:<key> tasks to skip on this machine (per-machine, gitignored).\n'
+        printf '# Managed by: mise run setup:install-exclude — one key per line, %s comments supported.\n' '#'
+        printf '# Available keys: %s\n' "${INSTALL_OPTOUT_KEYS[*]}"
+    } >"$INSTALL_EXCLUDE_FILE"
+}
+
+# Return 0 if the given install key is opted out in .install-exclude.
+is_install_excluded() {
+    local key="$1"
+    read_install_excludes
+    in_array "$key" "${INSTALL_EXCLUDED[@]}"
+}
+
+# Append a key to .install-exclude (no-op if already present).
+add_install_exclude() {
+    local key="$1"
+    read_install_excludes
+    in_array "$key" "${INSTALL_EXCLUDED[@]}" && return 0
+    ensure_install_exclude_file
+    INSTALL_EXCLUDED+=("$key")
+    write_install_excludes
 }
 
 # ─── Desktop environment detection ──────────────────────────────────────────

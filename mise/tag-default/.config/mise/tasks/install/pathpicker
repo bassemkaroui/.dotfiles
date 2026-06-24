@@ -8,6 +8,11 @@ set -eo pipefail
 TASK_NAME="install:pathpicker"
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../lib/helpers.sh"
 
+if is_install_excluded pathpicker; then
+    info "PathPicker is opted out in .install-exclude — skipping. (re-enable: mise run setup:install-exclude)"
+    exit 0
+fi
+
 # ─── Phase 1: Check if fpp is already installed ──────────────────────────────
 
 info "Phase 1: Check if fpp is already installed"

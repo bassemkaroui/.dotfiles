@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+#MISE description="Check for and install a newer Obsidian AppImage release"
+#MISE raw=true
+set -eo pipefail
+
+# ─── Helpers ───────────────────────────────────────────────────────────────────
+
+TASK_NAME="update:obsidian"
+LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../lib"
+# shellcheck source=../lib/helpers.sh
+source "$LIB_DIR/helpers.sh"
+# shellcheck source=../lib/obsidian_helpers.sh
+source "$LIB_DIR/obsidian_helpers.sh"
+
+# ─── Phase 1: Opt-out registry check ──────────────────────────────────────────
+
+info "Phase 1: Check opt-out registry"
+if is_install_excluded obsidian; then
+    info "Obsidian is opted out in .install-exclude — skipping."
+    exit 0
+fi
+
+# ─── Phase 2: Ensure Obsidian is installed ────────────────────────────────────
+
+info "Phase 2: Check installed version"
+CURRENT_VERSION="$(obsidian_installed_version)"
+if [[ -z "$CURRENT_VERSION" ]]; then
+    warn "Obsidian is not installed. Run: mise run install:obsidian"
+    exit 0
+fi
+ok "Obsidian installed: $CURRENT_VERSION"
+
+# ─── Phase 3: Resolve latest release ──────────────────────────────────────────
+
+info "Phase 3: Resolve latest Obsidian release"
+obsidian_fetch_release || fail "Could not reach the GitHub releases API"
+LATEST_VERSION="$(obsidian_latest_version)"
+APPIMAGE_URL="$(obsidian_appimage_url)"
+[[ -n "$LATEST_VERSION" ]] || fail "Could not determine the latest Obsidian version"
+
+if [[ "$CURRENT_VERSION" == "$LATEST_VERSION" ]]; then
+    ok "Obsidian is up to date ($CURRENT_VERSION)"
+    exit 0
+fi
+
+# ─── Phase 4: Update ──────────────────────────────────────────────────────────
+
+info "Phase 4: Update Obsidian ($CURRENT_VERSION → $LATEST_VERSION)"
+obsidian_install_appimage "$LATEST_VERSION" "$APPIMAGE_URL"
+
+printf '\n'
+info "============================================"
+info "  Obsidian updated to $LATEST_VERSION"
+info "============================================"
+printf '\n'

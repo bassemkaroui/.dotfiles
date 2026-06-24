@@ -1,0 +1,140 @@
+#!/usr/bin/env bash
+#MISE description="Install Obsidian (AppImage) for graphical environments; opt-out via .install-exclude"
+#MISE raw=true
+set -eo pipefail
+
+# ─── Helpers ───────────────────────────────────────────────────────────────────
+
+TASK_NAME="install:obsidian"
+LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../lib"
+# shellcheck source=../lib/helpers.sh
+source "$LIB_DIR/helpers.sh"
+# shellcheck source=../lib/obsidian_helpers.sh
+source "$LIB_DIR/obsidian_helpers.sh"
+
+DOTFILES_DIR="${DOTFILES_DIR:-$HOME/.dotfiles}"
+NONINTERACTIVE="${DOTFILES_NONINTERACTIVE:-0}"
+
+# Offer to persist a decline so future runs skip Obsidian without re-prompting.
+offer_optout_persist() {
+    info "Skipping Obsidian install."
+    printf 'Remember this choice (skip Obsidian on future runs)? [y/N]: '
+    read -r persist
+    if [[ "${persist,,}" =~ ^y ]]; then
+        add_install_exclude obsidian
+        ok "Added 'obsidian' to .install-exclude (re-enable: mise run setup:install-exclude)"
+    fi
+}
+
+# ─── Phase 1: Opt-out registry check ──────────────────────────────────────────
+
+info "Phase 1: Check opt-out registry"
+if is_install_excluded obsidian; then
+    info "Obsidian is opted out in .install-exclude — skipping. (re-enable: mise run setup:install-exclude)"
+    exit 0
+fi
+
+# ─── Phase 2: Confirm install (graphical detection + opt-out prompt) ──────────
+
+info "Phase 2: Confirm install"
+GRAPHICAL_ENV_FILE="$DOTFILES_DIR/.graphical-env"
+HAS_GRAPHICAL=false
+
+# 1. .graphical-env pin file (shared with Ghostty / GNOME extensions)
+if [[ -f "$GRAPHICAL_ENV_FILE" ]]; then
+    GRAPHICAL_PIN="$(<"$GRAPHICAL_ENV_FILE")"
+    case "${GRAPHICAL_PIN,,}" in
+        graphical | yes) HAS_GRAPHICAL=true ;;
+        server | none | no)
+            info "Graphical environment disabled via .graphical-env. Skipping Obsidian install."
+            exit 0
+            ;;
+    esac
+fi
+
+# 2. Auto-detect a graphical session
+if [[ "$HAS_GRAPHICAL" == false ]]; then
+    if [[ -n "${DISPLAY:-}" || -n "${WAYLAND_DISPLAY:-}" ]]; then
+        HAS_GRAPHICAL=true
+    elif [[ "${XDG_SESSION_TYPE:-}" == "x11" || "${XDG_SESSION_TYPE:-}" == "wayland" ]]; then
+        HAS_GRAPHICAL=true
+    fi
+fi
+
+if [[ "$HAS_GRAPHICAL" == true ]]; then
+    if [[ "$NONINTERACTIVE" == "1" ]]; then
+        info "Graphical environment detected — installing (DOTFILES_NONINTERACTIVE)"
+    else
+        printf 'Install Obsidian? [Y/n]: '
+        read -r REPLY_INSTALL
+        if [[ "${REPLY_INSTALL,,}" =~ ^n ]]; then
+            offer_optout_persist
+            exit 0
+        fi
+    fi
+else
+    if [[ "$NONINTERACTIVE" == "1" ]]; then
+        info "No graphical environment detected — skipping Obsidian (DOTFILES_NONINTERACTIVE)"
+        exit 0
+    fi
+    warn "No graphical environment detected."
+    printf 'Install Obsidian anyway? [y/N]: '
+    read -r REPLY_INSTALL
+    if [[ ! "${REPLY_INSTALL,,}" =~ ^y ]]; then
+        offer_optout_persist
+        exit 0
+    fi
+fi
+
+# ─── Phase 3: Resolve latest release ──────────────────────────────────────────
+
+info "Phase 3: Resolve latest Obsidian release"
+obsidian_fetch_release || fail "Could not reach the GitHub releases API"
+LATEST_VERSION="$(obsidian_latest_version)"
+APPIMAGE_URL="$(obsidian_appimage_url)"
+[[ -n "$LATEST_VERSION" ]] || fail "Could not determine the latest Obsidian version"
+ok "Latest Obsidian: $LATEST_VERSION"
+
+# ─── Phase 4: Compare with installed version ──────────────────────────────────
+
+info "Phase 4: Check installed version"
+CURRENT_VERSION="$(obsidian_installed_version)"
+if [[ -n "$CURRENT_VERSION" ]]; then
+    ok "Obsidian installed: $CURRENT_VERSION"
+    if [[ "$CURRENT_VERSION" == "$LATEST_VERSION" ]]; then
+        ok "Obsidian is up to date ($CURRENT_VERSION)"
+        exit 0
+    fi
+    warn "Newer version available: $CURRENT_VERSION → $LATEST_VERSION"
+    if [[ "$NONINTERACTIVE" == "1" ]]; then
+        info "Update skipped (DOTFILES_NONINTERACTIVE — keeping $CURRENT_VERSION)"
+        exit 0
+    fi
+    printf 'Update Obsidian to %s? [Y/n]: ' "$LATEST_VERSION"
+    read -r REPLY_UPDATE
+    if [[ "${REPLY_UPDATE,,}" =~ ^n ]]; then
+        info "Update skipped."
+        exit 0
+    fi
+fi
+
+# ─── Phase 5: Install ─────────────────────────────────────────────────────────
+
+info "Phase 5: Install Obsidian"
+obsidian_install_appimage "$LATEST_VERSION" "$APPIMAGE_URL"
+
+# ─── Phase 6: Verify ──────────────────────────────────────────────────────────
+
+info "Phase 6: Verify installation"
+if [[ -x "$OBSIDIAN_BIN" ]]; then
+    ok_changed "Obsidian ready: $OBSIDIAN_BIN ($(obsidian_installed_version))"
+else
+    fail "Obsidian installation failed — $OBSIDIAN_BIN not found"
+fi
+
+printf '\n'
+info "============================================"
+info "  Obsidian installation complete!"
+info "  Update anytime with: mise run update:obsidian"
+info "============================================"
+printf '\n'
